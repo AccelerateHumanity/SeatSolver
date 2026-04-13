@@ -43,10 +43,14 @@ jobs:
       - name: Build Windows distribution
         run: ./gradlew zipAppImage
 
+      - name: Rename ZIP for release
+        run: Copy-Item build/distributions/SeatSolver-*-Windows.zip SeatSolver-Windows.zip
+        shell: pwsh
+
       - uses: actions/upload-artifact@v4
         with:
           name: windows-app
-          path: build/distributions/SeatSolver-*-Windows.zip
+          path: SeatSolver-Windows.zip
 
   release:
     needs: [build-jar, build-windows]
