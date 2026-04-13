@@ -52,6 +52,8 @@ public class ClassroomPanel extends JPanel {
     private java.util.ArrayList<Landmark> selectedLandmarks = new java.util.ArrayList<Landmark>();
     private boolean isMultiDragging;
     private int multiDragLastX, multiDragLastY;
+    private java.util.HashMap<Desk, int[]> multiDragStartPos = new java.util.HashMap<Desk, int[]>();
+    private java.util.HashMap<Landmark, int[]> multiDragLmStartPos = new java.util.HashMap<Landmark, int[]>();
     private double displayScale = 1.0; // uniform scale for filling available space
 
     // Manual student seat drag (post-generation)
@@ -162,6 +164,7 @@ public class ClassroomPanel extends JPanel {
         // Scroll wheel for rotation
         addMouseWheelListener(new MouseWheelListener() {
             public void mouseWheelMoved(MouseWheelEvent e) {
+                if (discoMode) return;
                 double amount = e.getWheelRotation() * 15.0;
                 if (!selectedDesks.isEmpty() || !selectedLandmarks.isEmpty()) {
                     // Rotate entire multi-selection (desks + landmarks)
@@ -378,6 +381,7 @@ public class ClassroomPanel extends JPanel {
     }
 
     private void handleMousePress(MouseEvent e) {
+        if (discoMode) return; // lock editing during disco
         if (zoneDrawMode && SwingUtilities.isLeftMouseButton(e)) {
             zoneDragStartX = toModelX(e.getX());
             zoneDragStartY = toModelY(e.getY());
@@ -415,6 +419,7 @@ public class ClassroomPanel extends JPanel {
             isMultiDragging = true;
             multiDragLastX = toModelX(e.getX());
             multiDragLastY = toModelY(e.getY());
+            saveMultiDragStartPositions();
             repaint();
             return;
         }
@@ -437,6 +442,7 @@ public class ClassroomPanel extends JPanel {
                 isMultiDragging = true;
                 multiDragLastX = toModelX(e.getX());
                 multiDragLastY = toModelY(e.getY());
+                saveMultiDragStartPositions();
                 repaint();
                 return;
             }
@@ -466,6 +472,7 @@ public class ClassroomPanel extends JPanel {
     }
 
     private void handleMouseDrag(MouseEvent e) {
+        if (discoMode) return;
         // Follow the cursor with the picked-up student
         if (draggedStudent != null) {
             draggedStudentX = toModelX(e.getX());
@@ -545,6 +552,7 @@ public class ClassroomPanel extends JPanel {
     }
 
     private void handleMouseRelease(MouseEvent e) {
+        if (discoMode) return;
         // Drop a dragged student onto a target seat (swap or move)
         if (draggedStudent != null) {
             Seat target = getSeatAt(toModelX(e.getX()), toModelY(e.getY()));
@@ -575,6 +583,26 @@ public class ClassroomPanel extends JPanel {
         }
         if (isMultiDragging) {
             isMultiDragging = false;
+            // Check collision for all moved items — snap ALL back if any collide
+            boolean collision = false;
+            for (Desk d : selectedDesks) {
+                if (classroom.hasCollision(d, d)) { collision = true; break; }
+            }
+            if (!collision) {
+                for (Landmark lm : selectedLandmarks) {
+                    if (classroom.hasLandmarkCollision(lm, lm)) { collision = true; break; }
+                }
+            }
+            if (collision) {
+                for (Desk d : selectedDesks) {
+                    int[] pos = multiDragStartPos.get(d);
+                    if (pos != null) d.setPosition(pos[0], pos[1]);
+                }
+                for (Landmark lm : selectedLandmarks) {
+                    int[] pos = multiDragLmStartPos.get(lm);
+                    if (pos != null) lm.setPosition(pos[0], pos[1]);
+                }
+            }
             repaint();
             return;
         }
@@ -612,7 +640,8 @@ public class ClassroomPanel extends JPanel {
             int gw = Math.max(1, gx2 - gx1);
             int gh = Math.max(1, gy2 - gy1);
             if (gw >= 1 && gh >= 1) {
-                classroom.addZone(new Zone(pendingZoneLabel, gx1, gy1, gw, gh, pendingZoneColor));
+                Zone newZone = new Zone(pendingZoneLabel, gx1, gy1, gw, gh, pendingZoneColor);
+                undoManager.execute(new seating.layout.AddZoneCommand(classroom, newZone));
             }
             repaint();
             return;
@@ -653,6 +682,7 @@ public class ClassroomPanel extends JPanel {
     }
 
     private void showContextMenu(MouseEvent e) {
+        if (discoMode) return;
         int gs = classroom.getGridSize();
 
         // Student seat right-click → quick rule menu (takes priority over everything)
@@ -888,7 +918,11 @@ public class ClassroomPanel extends JPanel {
                 int result = JOptionPane.showConfirmDialog(ClassroomPanel.this, panel,
                     "Edit Zone", JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
                 if (result == JOptionPane.OK_OPTION && !labelField.getText().trim().isEmpty()) {
-                    zone.setLabel(labelField.getText().trim());
+                    undoManager.execute(new seating.layout.EditZoneCommand(zone,
+                        labelField.getText().trim(),
+                        zone.getGridX(), zone.getGridY(),
+                        zone.getGridWidth(), zone.getGridHeight(),
+                        zone.getColor()));
                     repaint();
                 }
             }
@@ -897,12 +931,42 @@ public class ClassroomPanel extends JPanel {
         JMenuItem deleteItem = new JMenuItem("Delete Zone");
         deleteItem.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent ae) {
-                classroom.removeZone(zone);
+                undoManager.execute(new seating.layout.DeleteZoneCommand(classroom, zone));
                 repaint();
             }
         });
 
+        JMenuItem resizeItem = new JMenuItem("Resize Zone...");
+        resizeItem.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent ae) {
+                int maxCols = classroom.getGridColumns();
+                int maxRows = classroom.getGridRows();
+                JSpinner xSpin = new JSpinner(new SpinnerNumberModel(zone.getGridX(), 0, maxCols - 1, 1));
+                JSpinner ySpin = new JSpinner(new SpinnerNumberModel(zone.getGridY(), 0, maxRows - 1, 1));
+                JSpinner wSpin = new JSpinner(new SpinnerNumberModel(zone.getGridWidth(), 1, maxCols, 1));
+                JSpinner hSpin = new JSpinner(new SpinnerNumberModel(zone.getGridHeight(), 1, maxRows, 1));
+                JPanel panel = new JPanel(new java.awt.GridLayout(4, 2, 5, 5));
+                panel.add(new JLabel("X (col):")); panel.add(xSpin);
+                panel.add(new JLabel("Y (row):")); panel.add(ySpin);
+                panel.add(new JLabel("Width:")); panel.add(wSpin);
+                panel.add(new JLabel("Height:")); panel.add(hSpin);
+                int result = JOptionPane.showConfirmDialog(ClassroomPanel.this, panel,
+                    "Resize Zone: " + zone.getLabel(), JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+                if (result == JOptionPane.OK_OPTION) {
+                    int nx = (Integer) xSpin.getValue();
+                    int ny = (Integer) ySpin.getValue();
+                    int nw = Math.max(1, Math.min((Integer) wSpin.getValue(), maxCols - nx));
+                    int nh = Math.max(1, Math.min((Integer) hSpin.getValue(), maxRows - ny));
+                    undoManager.execute(new seating.layout.EditZoneCommand(zone,
+                        zone.getLabel(), nx, ny, nw, nh, zone.getColor()));
+                    repaint();
+                }
+            }
+        });
+
         menu.add(editItem);
+        menu.add(resizeItem);
+        menu.addSeparator();
         menu.add(deleteItem);
         menu.show(this, e.getX(), e.getY());
     }
@@ -1133,6 +1197,33 @@ public class ClassroomPanel extends JPanel {
     }
 
     public Desk getSelectedDesk() { return selectedDesk; }
+
+    /** Snapshots the grid positions of all multi-selected items before a group drag. */
+    private void saveMultiDragStartPositions() {
+        multiDragStartPos.clear();
+        multiDragLmStartPos.clear();
+        for (Desk d : selectedDesks) {
+            multiDragStartPos.put(d, new int[]{d.getGridX(), d.getGridY()});
+        }
+        for (Landmark lm : selectedLandmarks) {
+            multiDragLmStartPos.put(lm, new int[]{lm.getGridX(), lm.getGridY()});
+        }
+    }
+
+    /** Resets all selection and drag state. Call after Clear All, template apply, etc. */
+    public void clearSelection() {
+        selectedDesk = null;
+        selectedLandmark = null;
+        selectedDesks.clear();
+        selectedLandmarks.clear();
+        isDragging = false;
+        isMultiDragging = false;
+        isDraggingLandmark = false;
+        isRectSelecting = false;
+        draggedStudent = null;
+        ghostDesk = null;
+        setCursor(Cursor.getDefaultCursor());
+    }
     public Classroom getClassroom() { return classroom; }
     public UndoManager getUndoManager() { return undoManager; }
 
@@ -1228,13 +1319,14 @@ public class ClassroomPanel extends JPanel {
             ConflictOverlay.draw(g, currentArrangement, constraintSet, seatGraph);
         }
 
-        if (ghostDesk != null) {
+        // Selection UI hidden during disco to prevent accidental edits
+        if (!discoMode && ghostDesk != null) {
             drawGhostDesk(g, gs);
         }
-        if (selectedDesk != null && ghostDesk == null) {
+        if (!discoMode && selectedDesk != null && ghostDesk == null) {
             drawSelection(g, gs);
         }
-        if (selectedLandmark != null && selectedDesk == null) {
+        if (!discoMode && selectedLandmark != null && selectedDesk == null) {
             AffineTransform svLm = g.getTransform();
             g.transform(selectedLandmark.getTransform(gs));
             double lmW = selectedLandmark.getGridW() * gs;
@@ -1251,8 +1343,8 @@ public class ClassroomPanel extends JPanel {
             g.setTransform(svLm);
         }
 
-        // Draw multi-select rectangle and highlights
-        if (isRectSelecting) {
+        // Draw multi-select rectangle and highlights (hidden during disco)
+        if (!discoMode && isRectSelecting) {
             int rx = Math.min(rectSelStartX, rectSelEndX);
             int ry = Math.min(rectSelStartY, rectSelEndY);
             int rw = Math.abs(rectSelEndX - rectSelStartX);
@@ -1263,7 +1355,7 @@ public class ClassroomPanel extends JPanel {
             g.setStroke(new BasicStroke(1.5f));
             g.drawRect(rx, ry, rw, rh);
         }
-        if (!selectedDesks.isEmpty() || !selectedLandmarks.isEmpty()) {
+        if (!discoMode && (!selectedDesks.isEmpty() || !selectedLandmarks.isEmpty())) {
             g.setColor(SELECTION_COLOR);
             g.setStroke(new BasicStroke(2.0f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND,
                 10.0f, new float[]{6.0f, 4.0f}, 0.0f));

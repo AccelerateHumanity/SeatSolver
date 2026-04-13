@@ -183,29 +183,111 @@ public class MainFrame extends JFrame {
         toolbar.addSeparator();
 
         // Clear all
-        JButton clearBtn = new JButton("Clear All");
+        final JButton clearBtn = new JButton("Clear All \u25BE");
         clearBtn.addActionListener(new java.awt.event.ActionListener() {
             public void actionPerformed(java.awt.event.ActionEvent e) {
-                int result = JOptionPane.showConfirmDialog(MainFrame.this,
-                    "Remove all desks from the classroom?",
-                    "Clear All", JOptionPane.YES_NO_OPTION);
-                if (result == JOptionPane.YES_OPTION) {
-                    classroom.getDesks().clear();
-                    // Remove custom zones but keep Front and Back
-                    java.util.Iterator<Zone> zit = classroom.getZones().iterator();
-                    while (zit.hasNext()) {
-                        String label = zit.next().getLabel();
-                        if (!"Front".equals(label) && !"Back".equals(label)) {
-                            zit.remove();
+                JPopupMenu popup = new JPopupMenu();
+
+                JMenuItem clearAll = new JMenuItem("Clear Everything");
+                clearAll.addActionListener(new java.awt.event.ActionListener() {
+                    public void actionPerformed(java.awt.event.ActionEvent ae) {
+                        int r = JOptionPane.showConfirmDialog(MainFrame.this,
+                            "Remove all desks, landmarks, custom zones, students, and rules?",
+                            "Clear Everything", JOptionPane.YES_NO_OPTION);
+                        if (r != JOptionPane.YES_OPTION) return;
+                        classroom.getDesks().clear();
+                        java.util.Iterator<Zone> zit = classroom.getZones().iterator();
+                        while (zit.hasNext()) {
+                            String label = zit.next().getLabel();
+                            if (!"Front".equals(label) && !"Back".equals(label)) zit.remove();
                         }
+                        classroom.getLandmarks().clear();
+                        studentPanel.getStudents().clear();
+                        constraintSet.getAll().clear();
+                        undoManager.clear();
+                        classroomPanel.setCurrentArrangement(null);
+                        classroomPanel.setConstraintData(null, null);
+                        arrangementPanel.setResult(null, null, null);
+                        classroomPanel.clearSelection();
+                        studentPanel.refresh();
+                        constraintPanel.refreshList();
+                        classroomPanel.repaint();
+                        updateStatus();
                     }
-                    classroom.getLandmarks().clear();
-                    undoManager.clear();
-                    classroomPanel.setCurrentArrangement(null);
-                    classroomPanel.setConstraintData(null, null);
-                    arrangementPanel.setResult(null, null, null);
-                    classroomPanel.repaint();
-                }
+                });
+                popup.add(clearAll);
+                popup.addSeparator();
+
+                JMenuItem clearDesks = new JMenuItem("Clear Desks");
+                clearDesks.addActionListener(new java.awt.event.ActionListener() {
+                    public void actionPerformed(java.awt.event.ActionEvent ae) {
+                        classroom.getDesks().clear();
+                        classroomPanel.clearSelection();
+                        classroomPanel.setCurrentArrangement(null);
+                        arrangementPanel.setResult(null, null, null);
+                        classroomPanel.repaint();
+                        updateStatus();
+                    }
+                });
+                popup.add(clearDesks);
+
+                JMenuItem clearLandmarks = new JMenuItem("Clear Landmarks");
+                clearLandmarks.addActionListener(new java.awt.event.ActionListener() {
+                    public void actionPerformed(java.awt.event.ActionEvent ae) {
+                        classroom.getLandmarks().clear();
+                        classroomPanel.clearSelection();
+                        classroomPanel.repaint();
+                    }
+                });
+                popup.add(clearLandmarks);
+
+                JMenuItem clearZones = new JMenuItem("Clear Custom Zones");
+                clearZones.addActionListener(new java.awt.event.ActionListener() {
+                    public void actionPerformed(java.awt.event.ActionEvent ae) {
+                        java.util.Iterator<Zone> zit = classroom.getZones().iterator();
+                        while (zit.hasNext()) {
+                            String label = zit.next().getLabel();
+                            if (!"Front".equals(label) && !"Back".equals(label)) zit.remove();
+                        }
+                        classroomPanel.repaint();
+                    }
+                });
+                popup.add(clearZones);
+
+                popup.addSeparator();
+
+                JMenuItem clearStudents = new JMenuItem("Clear Students");
+                clearStudents.addActionListener(new java.awt.event.ActionListener() {
+                    public void actionPerformed(java.awt.event.ActionEvent ae) {
+                        studentPanel.getStudents().clear();
+                        studentPanel.refresh();
+                        updateStatus();
+                    }
+                });
+                popup.add(clearStudents);
+
+                JMenuItem clearRules = new JMenuItem("Clear Rules");
+                clearRules.addActionListener(new java.awt.event.ActionListener() {
+                    public void actionPerformed(java.awt.event.ActionEvent ae) {
+                        constraintSet.getAll().clear();
+                        constraintPanel.refreshList();
+                        updateStatus();
+                    }
+                });
+                popup.add(clearRules);
+
+                JMenuItem clearArrangement = new JMenuItem("Clear Arrangement");
+                clearArrangement.addActionListener(new java.awt.event.ActionListener() {
+                    public void actionPerformed(java.awt.event.ActionEvent ae) {
+                        classroomPanel.setCurrentArrangement(null);
+                        classroomPanel.setConstraintData(null, null);
+                        arrangementPanel.setResult(null, null, null);
+                        classroomPanel.repaint();
+                    }
+                });
+                popup.add(clearArrangement);
+
+                popup.show(clearBtn, 0, clearBtn.getHeight());
             }
         });
         toolbar.add(clearBtn);

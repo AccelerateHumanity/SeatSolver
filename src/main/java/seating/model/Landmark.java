@@ -176,6 +176,30 @@ public class Landmark {
     }
 
     /**
+     * Returns the axis-aligned bounding box of the ROTATED landmark shape.
+     * For non-zero rotations, transforms the four corners through the
+     * landmark's AffineTransform and computes the enclosing AABB.
+     * Used by all collision checks so rotated landmarks collide correctly.
+     */
+    public java.awt.geom.Rectangle2D getRotatedBounds(int gs) {
+        if (rotation == 0) return getBounds(gs);
+        java.awt.geom.AffineTransform at = getTransform(gs);
+        double[] corners = {0, 0, gridW * gs, 0, gridW * gs, gridH * gs, 0, gridH * gs};
+        at.transform(corners, 0, corners, 0, 4);
+        double minX = corners[0], maxX = corners[0];
+        double minY = corners[1], maxY = corners[1];
+        for (int i = 2; i < 8; i += 2) {
+            minX = Math.min(minX, corners[i]);
+            maxX = Math.max(maxX, corners[i]);
+        }
+        for (int i = 3; i < 8; i += 2) {
+            minY = Math.min(minY, corners[i]);
+            maxY = Math.max(maxY, corners[i]);
+        }
+        return new java.awt.geom.Rectangle2D.Double(minX, minY, maxX - minX, maxY - minY);
+    }
+
+    /**
      * Tests if a point (in canvas pixel coords) falls inside this landmark,
      * accounting for rotation. Uses inverse transform to convert the click
      * point into the landmark's local coordinate space.

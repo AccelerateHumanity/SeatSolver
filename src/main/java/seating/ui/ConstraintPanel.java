@@ -72,6 +72,7 @@ public class ConstraintPanel extends JPanel {
         });
 
         JButton deleteBtn = new JButton("Delete");
+        deleteBtn.setToolTipText("Select a rule, then click to delete it");
         deleteBtn.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent e) { deleteRule(); }
         });
@@ -236,7 +237,10 @@ public class ConstraintPanel extends JPanel {
 
     private void deleteRule() {
         int idx = constraintList.getSelectedIndex();
-        if (idx < 0) return;
+        if (idx < 0) {
+            JOptionPane.showMessageDialog(this, "Select a rule first, then click Delete.");
+            return;
+        }
         constraintSet.getAll().remove(idx);
         refreshList();
     }

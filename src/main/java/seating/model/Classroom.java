@@ -80,10 +80,10 @@ public class Classroom {
             if (d == exclude) continue;
             if (desk.collidesWith(d, gridSize)) return true;
         }
-        // Also check desk vs landmarks
+        // Also check desk vs landmarks (rotation-aware bounds)
         java.awt.geom.Rectangle2D deskBounds = desk.getBounds(gridSize);
         for (Landmark lm : landmarks) {
-            if (deskBounds.intersects(lm.getBounds(gridSize))) return true;
+            if (deskBounds.intersects(lm.getRotatedBounds(gridSize))) return true;
         }
         return false;
     }
@@ -92,15 +92,15 @@ public class Classroom {
      * Checks if a landmark at its current position overlaps any desk or other landmark.
      */
     public boolean hasLandmarkCollision(Landmark landmark, Landmark exclude) {
-        java.awt.geom.Rectangle2D lmBounds = landmark.getBounds(gridSize);
+        java.awt.geom.Rectangle2D lmBounds = landmark.getRotatedBounds(gridSize);
         // Check vs desks
         for (Desk d : desks) {
             if (lmBounds.intersects(d.getBounds(gridSize))) return true;
         }
-        // Check vs other landmarks
+        // Check vs other landmarks (rotation-aware)
         for (Landmark lm : landmarks) {
             if (lm == exclude) continue;
-            if (lmBounds.intersects(lm.getBounds(gridSize))) return true;
+            if (lmBounds.intersects(lm.getRotatedBounds(gridSize))) return true;
         }
         return false;
     }
@@ -150,7 +150,13 @@ public class Classroom {
         return null;
     }
 
-    public void addLandmark(Landmark lm) { landmarks.add(lm); }
+    public void addLandmark(Landmark lm) {
+        // Clamp position so landmark stays inside the grid
+        lm.setPosition(
+            Math.max(0, Math.min(lm.getGridX(), gridColumns - lm.getGridW())),
+            Math.max(0, Math.min(lm.getGridY(), gridRows - lm.getGridH())));
+        landmarks.add(lm);
+    }
     public void removeLandmark(Landmark lm) { landmarks.remove(lm); }
     public List<Landmark> getLandmarks() { return landmarks; }
 

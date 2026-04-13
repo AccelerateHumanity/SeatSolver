@@ -100,8 +100,8 @@ public class DeskPalette extends JPanel {
         add(Box.createVerticalStrut(8));
 
         addLandmarkButton("Teacher's Desk", 6, 2);
-        addLandmarkButton("Door", 2, 4);
-        addLandmarkButton("Screen/Board", 8, 2);
+        addLandmarkButton("Door", 2, 3);   // matches default door size in MainFrame
+        addLandmarkButton("Screen/Board", 8, 2); // default Screen scales with room size
         addLandmarkButton("Window", 2, 6);
 
         add(Box.createVerticalStrut(10));
@@ -284,6 +284,10 @@ public class DeskPalette extends JPanel {
                 if (placed) {
                     canvasPanel.getUndoManager().execute(
                         new seating.layout.AddLandmarkCommand(room, lm));
+                } else {
+                    JOptionPane.showMessageDialog(canvasPanel,
+                        "No room to place " + type + ".", "Placement",
+                        JOptionPane.WARNING_MESSAGE);
                 }
                 canvasPanel.repaint();
             }

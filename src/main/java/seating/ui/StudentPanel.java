@@ -37,7 +37,7 @@ public class StudentPanel extends JPanel {
         tableModel = new StudentTableModel();
         table = new JTable(tableModel);
         table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-        table.setRowHeight(UIScale.scaled(24));
+        table.setRowHeight(24);
         table.getColumnModel().getColumn(0).setPreferredWidth(90);  // Name
         table.getColumnModel().getColumn(1).setPreferredWidth(20);  // Gender
         table.getColumnModel().getColumn(2).setPreferredWidth(25);  // Skill

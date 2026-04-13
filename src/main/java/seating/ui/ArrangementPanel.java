@@ -155,7 +155,7 @@ public class ArrangementPanel extends JPanel {
 
             // Card panel
             JPanel card = new JPanel(new BorderLayout(6, 0));
-            card.setMaximumSize(new Dimension(Integer.MAX_VALUE, UIScale.scaled(36)));
+            card.setMaximumSize(UIScale.dimension(Integer.MAX_VALUE, 36));
             card.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createMatteBorder(0, 0, 1, 0, new Color(230, 230, 235)),
                 BorderFactory.createEmptyBorder(4, 6, 4, 6)
