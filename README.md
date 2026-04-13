@@ -10,12 +10,20 @@ SeatSolver is a Java Swing application that lets teachers design classroom layou
 
 ## Quick Start
 
-**Prerequisites:** Java 11 or later (`java -version` to check)
+### Windows (recommended)
 
-### Download & Run
+1. Download `SeatSolver-Windows.zip` from the [latest release](../../releases/latest)
+2. Extract the zip (right-click → Extract All)
+3. Open the `SeatSolver` folder and double-click `SeatSolver.exe`
+
+No Java installation required.
+
+> **Note:** If Windows shows a SmartScreen warning, click "More info" then "Run anyway."
+
+### Mac / Linux (requires Java 11+)
 
 1. Download `SeatSolver.jar` from the [latest release](../../releases/latest)
-2. Double-click the JAR, or run from terminal:
+2. Run from terminal:
    ```
    java -jar SeatSolver.jar
    ```
@@ -25,9 +33,10 @@ SeatSolver is a Java Swing application that lets teachers design classroom layou
 ```bash
 git clone https://github.com/AccelerateHumanity/SeatSolver.git
 cd SeatSolver
-./gradlew build    # compile + test
-./gradlew run      # launch the application
-./gradlew jar      # build standalone JAR at build/libs/SeatSolver-*.jar
+./gradlew build         # compile + test
+./gradlew run           # launch the application
+./gradlew jar           # build standalone JAR at build/libs/SeatSolver-*.jar
+./gradlew zipAppImage   # build Windows app with bundled JRE (requires JDK 17+)
 ```
 
 ---

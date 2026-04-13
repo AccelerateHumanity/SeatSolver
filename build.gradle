@@ -41,3 +41,41 @@ tasks.register('runE2ETests', JavaExec) {
 
 // Disable the default test task (no JUnit)
 test.enabled = false
+
+// Native packaging via jpackage (requires JDK 17+)
+tasks.register('jpackage', Exec) {
+    dependsOn jar
+    description = 'Creates a native app image using jpackage'
+    group = 'distribution'
+
+    def jpackageExe = System.getenv('JPACKAGE_HOME') ?
+        "${System.getenv('JPACKAGE_HOME')}/bin/jpackage" : 'jpackage'
+    def outputDir = layout.buildDirectory.dir('jpackage').get().asFile
+    def inputDir = layout.buildDirectory.dir('libs').get().asFile
+    def jarName = "SeatSolver-${project.version}.jar"
+
+    doFirst { delete outputDir }
+
+    commandLine jpackageExe,
+        '--type', 'app-image',
+        '--input', inputDir.absolutePath,
+        '--main-jar', jarName,
+        '--main-class', 'seating.SeatingApp',
+        '--name', 'SeatSolver',
+        '--app-version', project.version,
+        '--dest', outputDir.absolutePath,
+        '--vendor', 'SeatSolver',
+        '--description', 'Classroom seating arrangement generator'
+
+    doLast { println "App image created at: ${outputDir}/SeatSolver" }
+}
+
+tasks.register('zipAppImage', Zip) {
+    dependsOn jpackage
+    description = 'Zips the jpackage app image for distribution'
+    group = 'distribution'
+
+    from layout.buildDirectory.dir('jpackage')
+    archiveFileName = "SeatSolver-${project.version}-Windows.zip"
+    destinationDirectory = layout.buildDirectory.dir('distributions')
+}
