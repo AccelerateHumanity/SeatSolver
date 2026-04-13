@@ -40,7 +40,7 @@ public class ConstraintPanel extends JPanel {
 
         // Header
         JLabel header = new JLabel("Rules: 0");
-        header.setFont(new Font("SansSerif", Font.BOLD, 12));
+        header.setFont(UIScale.font("SansSerif", Font.BOLD, 12));
         add(header, BorderLayout.NORTH);
 
         // Constraint list

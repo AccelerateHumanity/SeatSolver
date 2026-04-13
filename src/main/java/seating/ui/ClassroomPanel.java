@@ -918,7 +918,7 @@ public class ClassroomPanel extends JPanel {
         // Header (disabled)
         JMenuItem header = new JMenuItem("Student: " + student.getName());
         header.setEnabled(false);
-        header.setFont(new Font("SansSerif", Font.BOLD, 12));
+        header.setFont(UIScale.font("SansSerif", Font.BOLD, 12));
         menu.add(header);
         menu.addSeparator();
 
@@ -1244,7 +1244,7 @@ public class ClassroomPanel extends JPanel {
                 10.0f, new float[]{8.0f, 4.0f}, 0.0f));
             g.draw(new Rectangle2D.Double(-2, -2, lmW + 4, lmH + 4));
             if (selectedLandmark.getRotation() != 0) {
-                g.setFont(new Font("SansSerif", Font.PLAIN, 10));
+                g.setFont(UIScale.font("SansSerif", Font.PLAIN, 10));
                 g.setColor(new Color(41, 128, 185));
                 g.drawString((int) selectedLandmark.getRotation() + "\u00B0", 0, -4);
             }
@@ -1311,7 +1311,7 @@ public class ClassroomPanel extends JPanel {
             g.setColor(Color.WHITE);
             g.setStroke(new BasicStroke(2.0f));
             g.drawOval(draggedStudentX - 7, draggedStudentY - 7, 14, 14);
-            g.setFont(new Font("SansSerif", Font.BOLD, 11));
+            g.setFont(UIScale.font("SansSerif", Font.BOLD, 11));
             FontMetrics dfm = g.getFontMetrics();
             String nm = draggedStudent.getName();
             int nw = dfm.stringWidth(nm);
@@ -1335,14 +1335,14 @@ public class ClassroomPanel extends JPanel {
                 pendingZoneColor.getBlue(), 180));
             g.setStroke(new BasicStroke(2.0f));
             g.drawRect(rx, ry, rw, rh);
-            g.setFont(new Font("SansSerif", Font.BOLD, 12));
+            g.setFont(UIScale.font("SansSerif", Font.BOLD, 12));
             g.drawString(pendingZoneLabel, rx + 4, ry + 15);
         }
 
         // Draw empty state hint
         if (classroom.getDesks().isEmpty() && ghostDesk == null && !zoneDrawMode) {
             g.setColor(new Color(160, 160, 170));
-            g.setFont(new Font("SansSerif", Font.PLAIN, 16));
+            g.setFont(UIScale.font("SansSerif", Font.PLAIN, 16));
             String hint = "Click a desk type in the palette, then click here to place it.";
             FontMetrics fmHint = g.getFontMetrics();
             g.drawString(hint, (classroom.getPixelWidth() - fmHint.stringWidth(hint)) / 2,
@@ -1426,7 +1426,7 @@ public class ClassroomPanel extends JPanel {
 
     /** Draws the "FRONT OF CLASSROOM" pill label centered at the top of the canvas. */
     private void drawFrontLabel(Graphics2D g) {
-        g.setFont(new Font("SansSerif", Font.BOLD, 13));
+        g.setFont(UIScale.font("SansSerif", Font.BOLD, 13));
         FontMetrics fmFront = g.getFontMetrics();
         String frontLabel = "FRONT OF CLASSROOM";
         int labelW = fmFront.stringWidth(frontLabel);
@@ -1476,7 +1476,7 @@ public class ClassroomPanel extends JPanel {
 
     /** Draws zone labels on top of everything with background pills. Truncates long labels and nudges to avoid overlap. */
     private void drawZoneLabels(Graphics2D g, int gs) {
-        g.setFont(new Font("SansSerif", Font.BOLD, 11));
+        g.setFont(UIScale.font("SansSerif", Font.BOLD, 11));
         FontMetrics fm = g.getFontMetrics();
         // Reset shared list so drawStudentNames can read the current frame's rects
         lastZoneLabelRects.clear();
@@ -1632,7 +1632,7 @@ public class ClassroomPanel extends JPanel {
             String name = smartTruncate(student.getName(), desk);
             int seatCount = (desk != null) ? desk.getSeatCount() : 1;
             int fontSize = seatCount <= 2 ? 10 : (seatCount <= 4 ? 9 : 8);
-            g.setFont(new Font("SansSerif", Font.BOLD, fontSize));
+            g.setFont(UIScale.font("SansSerif", Font.BOLD, fontSize));
             FontMetrics fm = g.getFontMetrics();
             int tw = fm.stringWidth(name);
             int th = fm.getHeight() + 2;
@@ -1724,7 +1724,7 @@ public class ClassroomPanel extends JPanel {
         g.draw(new Rectangle2D.Double(-2, -2, w + 4, h + 4));
 
         if (selectedDesk.getRotation() != 0) {
-            g.setFont(new Font("SansSerif", Font.PLAIN, 10));
+            g.setFont(UIScale.font("SansSerif", Font.PLAIN, 10));
             g.setColor(new Color(41, 128, 185));
             g.drawString((int) selectedDesk.getRotation() + "\u00B0", 0, -4);
         }
