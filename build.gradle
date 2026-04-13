@@ -1,0 +1,43 @@
+plugins {
+    id 'java'
+    id 'application'
+}
+
+group = 'io.github.acceleratehumanity'
+version = '1.0.0'
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_11
+    targetCompatibility = JavaVersion.VERSION_11
+}
+
+application {
+    mainClass = 'seating.SeatingApp'
+}
+
+jar {
+    manifest {
+        attributes(
+            'Main-Class': 'seating.SeatingApp',
+            'Implementation-Title': 'SeatSolver',
+            'Implementation-Version': project.version
+        )
+    }
+}
+
+// Tests use a custom main() harness, not JUnit.
+// Run via: ./gradlew runTests or ./gradlew runE2ETests
+tasks.register('runTests', JavaExec) {
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'seating.SeatSolverTest'
+    jvmArgs = ['-Djava.awt.headless=true']
+}
+
+tasks.register('runE2ETests', JavaExec) {
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'seating.SeatSolverE2ETest'
+    jvmArgs = ['-Djava.awt.headless=true']
+}
+
+// Disable the default test task (no JUnit)
+test.enabled = false

@@ -1,0 +1,51 @@
+{
+  "classroom": {
+    "columns": 28,
+    "rows": 20,
+    "gridSize": 20,
+    "desks": [
+      {"type":"pair","id":"d1","gridX":4,"gridY":2,"rotation":0.0},
+      {"type":"pair","id":"d2","gridX":10,"gridY":2,"rotation":0.0},
+      {"type":"pair","id":"d3","gridX":16,"gridY":2,"rotation":0.0},
+      {"type":"group","id":"d4","gridX":2,"gridY":8,"rotation":0.0},
+      {"type":"group","id":"d5","gridX":10,"gridY":8,"rotation":0.0},
+      {"type":"circle","id":"d6","gridX":18,"gridY":8,"rotation":0.0},
+      {"type":"lab","id":"d7","gridX":2,"gridY":15,"rotation":0.0},
+      {"type":"lab","id":"d8","gridX":10,"gridY":15,"rotation":0.0}
+    ],
+    "zones": [
+      {"label":"Front","x":0,"y":0,"w":28,"h":4,"color":"#4caf50"},
+      {"label":"Back","x":0,"y":16,"w":28,"h":4,"color":"#2196f3"},
+      {"label":"Window","x":0,"y":0,"w":2,"h":20,"color":"#ffc107"}
+    ]
+  },
+  "students": [
+    {"id":"s_1","name":"Alice Johnson","gender":"F","skill":4,"tags":"honors;needs-front"},
+    {"id":"s_2","name":"Bob Smith","gender":"M","skill":2,"tags":""},
+    {"id":"s_3","name":"Carol Davis","gender":"F","skill":5,"tags":"honors"},
+    {"id":"s_4","name":"Dave Martinez","gender":"M","skill":3,"tags":"esl"},
+    {"id":"s_5","name":"Eve Wilson","gender":"F","skill":1,"tags":"iep"},
+    {"id":"s_6","name":"Frank Brown","gender":"M","skill":4,"tags":"honors"},
+    {"id":"s_7","name":"Grace Lee","gender":"F","skill":3,"tags":""},
+    {"id":"s_8","name":"Hank Thompson","gender":"M","skill":2,"tags":"esl"},
+    {"id":"s_9","name":"Ivy Chen","gender":"F","skill":5,"tags":"honors;needs-front"},
+    {"id":"s_10","name":"Jack Robinson","gender":"M","skill":3,"tags":""},
+    {"id":"s_11","name":"Kate Williams","gender":"F","skill":4,"tags":""},
+    {"id":"s_12","name":"Leo Garcia","gender":"M","skill":1,"tags":"iep"},
+    {"id":"s_13","name":"Mia Anderson","gender":"F","skill":3,"tags":""},
+    {"id":"s_14","name":"Nick Taylor","gender":"M","skill":5,"tags":"honors"},
+    {"id":"s_15","name":"Olivia Moore","gender":"F","skill":2,"tags":""},
+    {"id":"s_16","name":"Paul Jackson","gender":"M","skill":4,"tags":""},
+    {"id":"s_17","name":"Quinn White","gender":"F","skill":3,"tags":"esl"},
+    {"id":"s_18","name":"Ryan Harris","gender":"M","skill":2,"tags":""},
+    {"id":"s_19","name":"Sarah Clark","gender":"F","skill":4,"tags":"honors"},
+    {"id":"s_20","name":"Tyler Lewis","gender":"M","skill":3,"tags":""}
+  ],
+  "constraints": [
+    {"type":"proximity","hard":true,"weight":1.0,"studentA":"s_1","studentB":"s_2","mode":"apart"},
+    {"type":"proximity","hard":false,"weight":1.0,"studentA":"s_3","studentB":"s_6","mode":"together"},
+    {"type":"zone","hard":true,"weight":1.0,"student":"s_1","zone":"Front","mode":"must_be_in"},
+    {"type":"zone","hard":true,"weight":1.0,"student":"s_9","zone":"Front","mode":"must_be_in"},
+    {"type":"balance","hard":false,"weight":1.0,"attribute":"gender"}
+  ]
+}

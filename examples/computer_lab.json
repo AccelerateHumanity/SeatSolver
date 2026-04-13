@@ -1,0 +1,36 @@
+{
+  "classroom": {
+    "columns": 28,
+    "rows": 20,
+    "gridSize": 20,
+    "desks": [
+      {"type":"pair","id":"t1","gridX":0,"gridY":0,"rotation":0.0},
+      {"type":"pair","id":"t2","gridX":4,"gridY":0,"rotation":0.0},
+      {"type":"pair","id":"t3","gridX":8,"gridY":0,"rotation":0.0},
+      {"type":"pair","id":"t4","gridX":12,"gridY":0,"rotation":0.0},
+      {"type":"pair","id":"t5","gridX":16,"gridY":0,"rotation":0.0},
+      {"type":"pair","id":"t6","gridX":20,"gridY":0,"rotation":0.0},
+      {"type":"pair","id":"t7","gridX":24,"gridY":0,"rotation":0.0},
+      {"type":"single","id":"l1","gridX":0,"gridY":4,"rotation":-90.0},
+      {"type":"single","id":"l2","gridX":0,"gridY":6,"rotation":-90.0},
+      {"type":"single","id":"l3","gridX":0,"gridY":8,"rotation":-90.0},
+      {"type":"single","id":"l4","gridX":0,"gridY":10,"rotation":-90.0},
+      {"type":"single","id":"l5","gridX":0,"gridY":12,"rotation":-90.0},
+      {"type":"single","id":"l6","gridX":0,"gridY":14,"rotation":-90.0},
+      {"type":"single","id":"l7","gridX":0,"gridY":16,"rotation":-90.0},
+      {"type":"single","id":"r1","gridX":26,"gridY":4,"rotation":90.0},
+      {"type":"single","id":"r2","gridX":26,"gridY":6,"rotation":90.0},
+      {"type":"single","id":"r3","gridX":26,"gridY":8,"rotation":90.0},
+      {"type":"single","id":"r4","gridX":26,"gridY":10,"rotation":90.0},
+      {"type":"single","id":"r5","gridX":26,"gridY":12,"rotation":90.0},
+      {"type":"single","id":"r6","gridX":26,"gridY":14,"rotation":90.0},
+      {"type":"single","id":"r7","gridX":26,"gridY":16,"rotation":90.0}
+    ],
+    "zones": [
+      {"label":"Front","x":0,"y":0,"w":28,"h":4,"color":"#4caf50"},
+      {"label":"Back","x":0,"y":16,"w":28,"h":4,"color":"#2196f3"}
+    ]
+  },
+  "students": [],
+  "constraints": []
+}

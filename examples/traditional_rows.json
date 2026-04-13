@@ -1,0 +1,27 @@
+{
+  "classroom": {
+    "columns": 28,
+    "rows": 20,
+    "gridSize": 20,
+    "desks": [
+      {"type":"pair","id":"d1","gridX":4,"gridY":2,"rotation":0.0},
+      {"type":"pair","id":"d2","gridX":10,"gridY":2,"rotation":0.0},
+      {"type":"pair","id":"d3","gridX":16,"gridY":2,"rotation":0.0},
+      {"type":"pair","id":"d4","gridX":4,"gridY":6,"rotation":0.0},
+      {"type":"pair","id":"d5","gridX":10,"gridY":6,"rotation":0.0},
+      {"type":"pair","id":"d6","gridX":16,"gridY":6,"rotation":0.0},
+      {"type":"pair","id":"d7","gridX":4,"gridY":10,"rotation":0.0},
+      {"type":"pair","id":"d8","gridX":10,"gridY":10,"rotation":0.0},
+      {"type":"pair","id":"d9","gridX":16,"gridY":10,"rotation":0.0},
+      {"type":"pair","id":"d10","gridX":4,"gridY":14,"rotation":0.0},
+      {"type":"pair","id":"d11","gridX":10,"gridY":14,"rotation":0.0},
+      {"type":"pair","id":"d12","gridX":16,"gridY":14,"rotation":0.0}
+    ],
+    "zones": [
+      {"label":"Front","x":0,"y":0,"w":28,"h":4,"color":"#4caf50"},
+      {"label":"Back","x":0,"y":16,"w":28,"h":4,"color":"#2196f3"}
+    ]
+  },
+  "students": [],
+  "constraints": []
+}
