@@ -4,7 +4,7 @@ plugins {
 }
 
 group = 'io.github.acceleratehumanity'
-version = '1.3.0'
+version = '1.3.1'
 
 java {
     sourceCompatibility = JavaVersion.VERSION_11
@@ -65,7 +65,9 @@ tasks.register('jpackage', Exec) {
         '--app-version', project.version,
         '--dest', outputDir.absolutePath,
         '--vendor', 'SeatSolver',
-        '--description', 'Classroom seating arrangement generator'
+        '--description', 'Classroom seating arrangement generator',
+        // Ensure the bundled JRE enables Java2D HiDPI auto-scaling on Windows
+        '--java-options', '-Dsun.java2d.uiScale.enabled=true'
 
     doLast { println "App image created at: ${outputDir}/SeatSolver" }
 }

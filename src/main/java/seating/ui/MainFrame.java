@@ -67,6 +67,9 @@ public class MainFrame extends JFrame {
         pack();
         setMinimumSize(UIScale.dimension(900, 600));
         setLocationRelativeTo(null);
+        // Start maximized so the canvas always gets the full display —
+        // avoids pack() sizing surprises on HiDPI monitors.
+        setExtendedState(JFrame.MAXIMIZED_BOTH);
     }
 
     private void buildUI() {
