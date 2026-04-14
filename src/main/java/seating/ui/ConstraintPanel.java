@@ -46,7 +46,6 @@ public class ConstraintPanel extends JPanel {
         // Constraint list
         listModel = new DefaultListModel<String>();
         constraintList = new JList<String>(listModel);
-        constraintList.setFont(UIScale.font("SansSerif", Font.PLAIN, 12));
         constraintList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         add(new JScrollPane(constraintList), BorderLayout.CENTER);
 
@@ -54,30 +53,25 @@ public class ConstraintPanel extends JPanel {
         JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
         buttonPanel.setOpaque(false);
 
-        Font btnFont = UIScale.font("SansSerif", Font.PLAIN, 12);
         JButton proximityBtn = new JButton("+ Proximity");
-        proximityBtn.setFont(btnFont);
         proximityBtn.setToolTipText("Keep students apart or together");
         proximityBtn.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent e) { addProximityRule(); }
         });
 
         JButton zoneBtn = new JButton("+ Zone");
-        zoneBtn.setFont(btnFont);
         zoneBtn.setToolTipText("Assign student to a zone");
         zoneBtn.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent e) { addZoneRule(); }
         });
 
         JButton balanceBtn = new JButton("+ Balance");
-        balanceBtn.setFont(btnFont);
         balanceBtn.setToolTipText("Balance attribute across groups");
         balanceBtn.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent e) { addBalanceRule(); }
         });
 
         JButton deleteBtn = new JButton("Delete");
-        deleteBtn.setFont(btnFont);
         deleteBtn.setToolTipText("Select a rule, then click to delete it");
         deleteBtn.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent e) { deleteRule(); }

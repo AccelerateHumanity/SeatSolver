@@ -50,6 +50,7 @@ public class MainFrame extends JFrame {
         studentPanel.setDeleteListener(new StudentPanel.StudentDeleteListener() {
             public void onStudentDeleted(Student s) {
                 constraintPanel.removeConstraintsFor(s);
+                classroomPanel.invalidateArrangement();
             }
         });
         arrangementPanel = new ArrangementPanel(classroomPanel);
@@ -57,7 +58,11 @@ public class MainFrame extends JFrame {
         // Results tab so scores reflect the new placement.
         classroomPanel.setArrangementChangeListener(new ClassroomPanel.ArrangementChangeListener() {
             public void onArrangementChanged(seating.model.SeatingArrangement arr) {
-                arrangementPanel.refreshCurrentArrangement();
+                if (arr == null) {
+                    arrangementPanel.setResult(null, null, null);
+                } else {
+                    arrangementPanel.refreshCurrentArrangement();
+                }
             }
         });
 
@@ -67,9 +72,6 @@ public class MainFrame extends JFrame {
         pack();
         setMinimumSize(UIScale.dimension(900, 600));
         setLocationRelativeTo(null);
-        // Start maximized so the canvas always gets the full display —
-        // avoids pack() sizing surprises on HiDPI monitors.
-        setExtendedState(JFrame.MAXIMIZED_BOTH);
     }
 
     private void buildUI() {
@@ -91,7 +93,7 @@ public class MainFrame extends JFrame {
 
         // Right: Tabbed side panel (Students/Rules/Results tabs)
         sidePanel = new JTabbedPane();
-        sidePanel.setPreferredSize(UIScale.dimension(380, 0));
+        sidePanel.setPreferredSize(UIScale.dimension(320, 0));
         sidePanel.addTab("Students", studentPanel);
         sidePanel.addTab("Rules", constraintPanel);
         sidePanel.addTab("Results", arrangementPanel);
@@ -104,11 +106,11 @@ public class MainFrame extends JFrame {
             BorderFactory.createEmptyBorder(4, 10, 4, 10)));
         statusBar.setBackground(new Color(248, 248, 250));
         statusLabel = new JLabel("Desks: 0 | Seats: 0");
-        statusLabel.setFont(UIScale.font("SansSerif", Font.PLAIN, 13));
+        statusLabel.setFont(UIScale.font("SansSerif", Font.PLAIN, 12));
         statusLabel.setForeground(new Color(100, 100, 105));
         statusBar.add(statusLabel, BorderLayout.WEST);
         JLabel creditLabel = new JLabel("Created by Harley Chu");
-        creditLabel.setFont(UIScale.font("SansSerif", Font.ITALIC, 13));
+        creditLabel.setFont(UIScale.font("SansSerif", Font.ITALIC, 11));
         creditLabel.setForeground(new Color(140, 140, 145));
         statusBar.add(creditLabel, BorderLayout.EAST);
         add(statusBar, BorderLayout.SOUTH);
@@ -252,6 +254,7 @@ public class MainFrame extends JFrame {
                             String label = zit.next().getLabel();
                             if (!"Front".equals(label) && !"Back".equals(label)) zit.remove();
                         }
+                        classroomPanel.invalidateArrangement();
                         classroomPanel.repaint();
                     }
                 });
@@ -264,6 +267,7 @@ public class MainFrame extends JFrame {
                     public void actionPerformed(java.awt.event.ActionEvent ae) {
                         studentPanel.getStudents().clear();
                         studentPanel.refresh();
+                        classroomPanel.invalidateArrangement();
                         updateStatus();
                     }
                 });
@@ -274,6 +278,7 @@ public class MainFrame extends JFrame {
                     public void actionPerformed(java.awt.event.ActionEvent ae) {
                         constraintSet.getAll().clear();
                         constraintPanel.refreshList();
+                        classroomPanel.invalidateArrangement();
                         updateStatus();
                     }
                 });
@@ -322,7 +327,7 @@ public class MainFrame extends JFrame {
         toolbar.add(Box.createHorizontalGlue());
 
         JLabel modeLabel = new JLabel("SeatSolver v2.0");
-        modeLabel.setFont(UIScale.font("SansSerif", Font.ITALIC, 13));
+        modeLabel.setFont(UIScale.font("SansSerif", Font.ITALIC, 11));
         modeLabel.setForeground(new Color(130, 130, 135));
         toolbar.add(modeLabel);
 

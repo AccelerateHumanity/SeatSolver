@@ -27,11 +27,6 @@ public class SeatingApp {
             // Fall back to default look and feel
         }
 
-        // Bump all default Swing fonts below 13pt up to 13pt so toolbar
-        // buttons, tables, menus, and tooltips are readable on HiDPI
-        // screens where Windows L&F defaults to ~11pt.
-        seating.ui.UIScale.installUIDefaults(14);
-
         // Launch on the Event Dispatch Thread
         SwingUtilities.invokeLater(new Runnable() {
             public void run() {

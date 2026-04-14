@@ -202,12 +202,17 @@ public class Classroom {
             }
         }
 
-        // Remove landmarks that no longer fit
+        // Remove landmarks that no longer fit (checks ROTATED AABB so rotated
+        // landmarks whose visual footprint exceeds the new grid are dropped).
         java.util.Iterator<Landmark> lit = landmarks.iterator();
+        double maxPixW = gridColumns * gridSize;
+        double maxPixH = gridRows * gridSize;
         while (lit.hasNext()) {
             Landmark lm = lit.next();
-            if (lm.getGridX() + lm.getGridW() > gridColumns ||
-                lm.getGridY() + lm.getGridH() > gridRows) {
+            java.awt.geom.Rectangle2D rb = lm.getRotatedBounds(gridSize);
+            if (rb.getX() < 0 || rb.getY() < 0 ||
+                rb.getX() + rb.getWidth() > maxPixW ||
+                rb.getY() + rb.getHeight() > maxPixH) {
                 lit.remove();
             }
         }

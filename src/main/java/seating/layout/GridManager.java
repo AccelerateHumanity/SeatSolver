@@ -2,6 +2,7 @@ package seating.layout;
 
 import seating.model.Classroom;
 import seating.model.Desk;
+import seating.model.Landmark;
 
 /**
  * Handles grid snapping and collision detection for desk placement.
@@ -48,6 +49,45 @@ public class GridManager {
         gx = Math.max(0, Math.min(gx, maxX));
         gy = Math.max(0, Math.min(gy, maxY));
         return new int[] { gx, gy };
+    }
+
+    /**
+     * Clamps a landmark's grid position so its ROTATED footprint stays
+     * fully within the classroom. Uses {@link Landmark#getRotatedBounds(int)}
+     * so rotated landmarks are clamped by their true AABB.
+     *
+     * @param lm the landmark
+     * @param gx proposed grid x
+     * @param gy proposed grid y
+     * @return array of [clampedGx, clampedGy]
+     */
+    public int[] clampLandmarkToClassroom(Landmark lm, int gx, int gy) {
+        int gs = classroom.getGridSize();
+        int cols = classroom.getGridColumns();
+        int rows = classroom.getGridRows();
+
+        // Probe rotated AABB as if landmark were at (gx, gy)
+        int origX = lm.getGridX();
+        int origY = lm.getGridY();
+        lm.setPosition(gx, gy);
+        java.awt.geom.Rectangle2D rb = lm.getRotatedBounds(gs);
+        lm.setPosition(origX, origY);
+
+        int rbLeft = (int) Math.floor(rb.getX() / gs);
+        int rbTop = (int) Math.floor(rb.getY() / gs);
+        int rbRight = (int) Math.ceil((rb.getX() + rb.getWidth()) / gs);
+        int rbBottom = (int) Math.ceil((rb.getY() + rb.getHeight()) / gs);
+
+        // Shift the landmark so the rotated AABB falls inside [0, cols] x [0, rows]
+        int shiftX = 0;
+        if (rbLeft < 0) shiftX = -rbLeft;
+        else if (rbRight > cols) shiftX = cols - rbRight;
+
+        int shiftY = 0;
+        if (rbTop < 0) shiftY = -rbTop;
+        else if (rbBottom > rows) shiftY = rows - rbBottom;
+
+        return new int[] { gx + shiftX, gy + shiftY };
     }
 
     /**

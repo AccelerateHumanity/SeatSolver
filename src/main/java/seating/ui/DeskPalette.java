@@ -25,7 +25,7 @@ public class DeskPalette extends JPanel {
         this.canvasPanel = canvasPanel;
         setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
         setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
-        setPreferredSize(UIScale.dimension(180, 0));
+        setPreferredSize(UIScale.dimension(140, 0));
         setBackground(new Color(250, 250, 252));
 
         addDeskSection();
@@ -56,8 +56,7 @@ public class DeskPalette extends JPanel {
         JButton addZoneBtn = new JButton("+ Add Zone");
         addZoneBtn.setToolTipText("Click-drag on canvas to define a zone");
         addZoneBtn.setAlignmentX(Component.LEFT_ALIGNMENT);
-        addZoneBtn.setMaximumSize(UIScale.dimension(170, 34));
-        addZoneBtn.setFont(UIScale.font("SansSerif", Font.PLAIN, 12));
+        addZoneBtn.setMaximumSize(UIScale.dimension(130, 32));
         addZoneBtn.setFocusPainted(false);
         addZoneBtn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         addZoneBtn.addActionListener(new ActionListener() {
@@ -111,8 +110,7 @@ public class DeskPalette extends JPanel {
         JButton roomSetup = new JButton("Room Size...");
         roomSetup.setToolTipText("Change classroom dimensions");
         roomSetup.setAlignmentX(Component.LEFT_ALIGNMENT);
-        roomSetup.setMaximumSize(UIScale.dimension(170, 30));
-        roomSetup.setFont(UIScale.font("SansSerif", Font.PLAIN, 12));
+        roomSetup.setMaximumSize(UIScale.dimension(130, 28));
         roomSetup.setFocusPainted(false);
         roomSetup.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent e) {
@@ -138,11 +136,10 @@ public class DeskPalette extends JPanel {
         add(Box.createVerticalStrut(16));
 
         // Instructions
-        JLabel tip = new JLabel("<html>Click a desk type,<br>then click canvas<br>to place it.<br><br>"
+        JLabel tip = new JLabel("<html><small>Click a desk type,<br>then click canvas<br>to place it.<br><br>"
             + "Scroll wheel to<br>rotate selected.<br><br>"
             + "Right-click for<br>more options.<br><br>"
-            + "Right-click a zone<br>to edit or delete.</html>");
-        tip.setFont(UIScale.font("SansSerif", Font.PLAIN, 11));
+            + "Right-click a zone<br>to edit or delete.</small></html>");
         tip.setForeground(new Color(130, 130, 135));
         tip.setAlignmentX(Component.LEFT_ALIGNMENT);
         add(tip);
@@ -154,8 +151,7 @@ public class DeskPalette extends JPanel {
         JButton btn = new JButton(label);
         btn.setToolTipText(tooltip);
         btn.setAlignmentX(Component.LEFT_ALIGNMENT);
-        btn.setMaximumSize(UIScale.dimension(170, 36));
-        btn.setFont(UIScale.font("SansSerif", Font.PLAIN, 12));
+        btn.setMaximumSize(UIScale.dimension(130, 32));
         btn.setFocusPainted(false);
         btn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
 
@@ -184,9 +180,9 @@ public class DeskPalette extends JPanel {
         JButton btn = new JButton(label);
         btn.setToolTipText(tooltip);
         btn.setAlignmentX(Component.LEFT_ALIGNMENT);
-        btn.setMaximumSize(UIScale.dimension(170, 32));
+        btn.setMaximumSize(UIScale.dimension(130, 28));
         btn.setFocusPainted(false);
-        btn.setFont(UIScale.font("SansSerif", Font.PLAIN, 12));
+        btn.setFont(UIScale.font("SansSerif", Font.PLAIN, 11));
         final String templateName = label;
         btn.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent e) {
@@ -262,38 +258,25 @@ public class DeskPalette extends JPanel {
         for (Desk d : room.getDesks()) { d.draw(g, room.getGridSize()); }
         g.dispose();
 
+        // Applying a template replaces the desk layout — any existing
+        // arrangement + conflict overlay is stale and should be cleared.
+        canvasPanel.invalidateArrangement();
+        canvasPanel.clearSelection();
         canvasPanel.repaint();
     }
 
     private void addLandmarkButton(final String type, final int w, final int h) {
         JButton btn = new JButton(type);
         btn.setAlignmentX(Component.LEFT_ALIGNMENT);
-        btn.setMaximumSize(UIScale.dimension(170, 30));
+        btn.setMaximumSize(UIScale.dimension(130, 26));
         btn.setFocusPainted(false);
-        btn.setFont(UIScale.font("SansSerif", Font.PLAIN, 12));
+        btn.setFont(UIScale.font("SansSerif", Font.PLAIN, 11));
         btn.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent e) {
-                Classroom room = canvasPanel.getClassroom();
-                // Find first non-colliding position
+                // Ghost placement — hand a landmark to the canvas, user picks
+                // its spot with a click (mirrors desk placement flow).
                 Landmark lm = new Landmark(type, 0, 0, w, h);
-                boolean placed = false;
-                for (int gy = 0; gy + h <= room.getGridRows() && !placed; gy++) {
-                    for (int gx = 0; gx + w <= room.getGridColumns() && !placed; gx++) {
-                        lm.setPosition(gx, gy);
-                        if (!room.hasLandmarkCollision(lm, null)) {
-                            placed = true;
-                        }
-                    }
-                }
-                if (placed) {
-                    canvasPanel.getUndoManager().execute(
-                        new seating.layout.AddLandmarkCommand(room, lm));
-                } else {
-                    JOptionPane.showMessageDialog(canvasPanel,
-                        "No room to place " + type + ".", "Placement",
-                        JOptionPane.WARNING_MESSAGE);
-                }
-                canvasPanel.repaint();
+                canvasPanel.setGhostLandmark(lm);
             }
         });
         add(btn);
