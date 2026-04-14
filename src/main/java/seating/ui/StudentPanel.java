@@ -37,7 +37,9 @@ public class StudentPanel extends JPanel {
         tableModel = new StudentTableModel();
         table = new JTable(tableModel);
         table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-        table.setRowHeight(24);
+        table.setRowHeight(UIScale.scaled(28));
+        table.setFont(UIScale.font("SansSerif", Font.PLAIN, 12));
+        table.getTableHeader().setFont(UIScale.font("SansSerif", Font.BOLD, 12));
         table.getColumnModel().getColumn(0).setPreferredWidth(90);  // Name
         table.getColumnModel().getColumn(1).setPreferredWidth(20);  // Gender
         table.getColumnModel().getColumn(2).setPreferredWidth(25);  // Skill
@@ -99,22 +101,27 @@ public class StudentPanel extends JPanel {
         JPanel buttonPanel = new JPanel(new java.awt.GridLayout(2, 2, 4, 4));
         buttonPanel.setOpaque(false);
 
+        Font btnFont = UIScale.font("SansSerif", Font.PLAIN, 12);
         JButton addBtn = new JButton("Add");
+        addBtn.setFont(btnFont);
         addBtn.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent e) { addStudent(); }
         });
 
         JButton editBtn = new JButton("Edit");
+        editBtn.setFont(btnFont);
         editBtn.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent e) { editStudent(); }
         });
 
         JButton deleteBtn = new JButton("Delete");
+        deleteBtn.setFont(btnFont);
         deleteBtn.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent e) { deleteStudent(); }
         });
 
         JButton importBtn = new JButton("Import CSV");
+        importBtn.setFont(btnFont);
         importBtn.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent e) { importCsv(); }
         });

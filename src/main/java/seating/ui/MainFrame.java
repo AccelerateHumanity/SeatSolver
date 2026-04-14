@@ -91,7 +91,7 @@ public class MainFrame extends JFrame {
 
         // Right: Tabbed side panel (Students/Rules/Results tabs)
         sidePanel = new JTabbedPane();
-        sidePanel.setPreferredSize(UIScale.dimension(320, 0));
+        sidePanel.setPreferredSize(UIScale.dimension(380, 0));
         sidePanel.addTab("Students", studentPanel);
         sidePanel.addTab("Rules", constraintPanel);
         sidePanel.addTab("Results", arrangementPanel);
