@@ -70,4 +70,31 @@ public final class UIScale {
     public static Dimension dimension(int width, int height) {
         return new Dimension(scaled(width), scaled(height));
     }
+
+    /**
+     * Overrides the Swing Look &amp; Feel default fonts with a larger baseline
+     * so toolbar buttons, tables, menus, and tooltips are readable on
+     * HiDPI and regular displays alike. Must be called AFTER
+     * UIManager.setLookAndFeel(...) and BEFORE creating any Swing windows.
+     *
+     * <p>All fonts smaller than the given minimum point size are bumped
+     * to that size; larger fonts are left alone so headings and monospace
+     * defaults keep their design sizes.
+     *
+     * @param minSize minimum point size for all default fonts (e.g. 13)
+     */
+    public static void installUIDefaults(int minSize) {
+        java.util.Enumeration<Object> keys = javax.swing.UIManager.getDefaults().keys();
+        while (keys.hasMoreElements()) {
+            Object key = keys.nextElement();
+            Object value = javax.swing.UIManager.get(key);
+            if (value instanceof Font) {
+                Font f = (Font) value;
+                if (f.getSize() < minSize) {
+                    javax.swing.UIManager.put(key,
+                        new javax.swing.plaf.FontUIResource(f.deriveFont((float) minSize)));
+                }
+            }
+        }
+    }
 }

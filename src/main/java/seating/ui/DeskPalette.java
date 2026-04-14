@@ -138,10 +138,11 @@ public class DeskPalette extends JPanel {
         add(Box.createVerticalStrut(16));
 
         // Instructions
-        JLabel tip = new JLabel("<html><small>Click a desk type,<br>then click canvas<br>to place it.<br><br>"
+        JLabel tip = new JLabel("<html>Click a desk type,<br>then click canvas<br>to place it.<br><br>"
             + "Scroll wheel to<br>rotate selected.<br><br>"
             + "Right-click for<br>more options.<br><br>"
-            + "Right-click a zone<br>to edit or delete.</small></html>");
+            + "Right-click a zone<br>to edit or delete.</html>");
+        tip.setFont(UIScale.font("SansSerif", Font.PLAIN, 11));
         tip.setForeground(new Color(130, 130, 135));
         tip.setAlignmentX(Component.LEFT_ALIGNMENT);
         add(tip);

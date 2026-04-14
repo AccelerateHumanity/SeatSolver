@@ -104,11 +104,11 @@ public class MainFrame extends JFrame {
             BorderFactory.createEmptyBorder(4, 10, 4, 10)));
         statusBar.setBackground(new Color(248, 248, 250));
         statusLabel = new JLabel("Desks: 0 | Seats: 0");
-        statusLabel.setFont(UIScale.font("SansSerif", Font.PLAIN, 12));
+        statusLabel.setFont(UIScale.font("SansSerif", Font.PLAIN, 13));
         statusLabel.setForeground(new Color(100, 100, 105));
         statusBar.add(statusLabel, BorderLayout.WEST);
         JLabel creditLabel = new JLabel("Created by Harley Chu");
-        creditLabel.setFont(UIScale.font("SansSerif", Font.ITALIC, 11));
+        creditLabel.setFont(UIScale.font("SansSerif", Font.ITALIC, 13));
         creditLabel.setForeground(new Color(140, 140, 145));
         statusBar.add(creditLabel, BorderLayout.EAST);
         add(statusBar, BorderLayout.SOUTH);
@@ -322,7 +322,7 @@ public class MainFrame extends JFrame {
         toolbar.add(Box.createHorizontalGlue());
 
         JLabel modeLabel = new JLabel("SeatSolver v2.0");
-        modeLabel.setFont(UIScale.font("SansSerif", Font.ITALIC, 11));
+        modeLabel.setFont(UIScale.font("SansSerif", Font.ITALIC, 13));
         modeLabel.setForeground(new Color(130, 130, 135));
         toolbar.add(modeLabel);
 
