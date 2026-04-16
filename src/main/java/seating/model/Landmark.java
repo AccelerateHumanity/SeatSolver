@@ -1,5 +1,4 @@
 package seating.model;
-
 import seating.ui.UIScale;
 
 import java.awt.*;

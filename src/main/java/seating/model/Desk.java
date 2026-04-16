@@ -140,6 +140,33 @@ public abstract class Desk {
     }
 
     /**
+     * Returns the axis-aligned bounding box of the ROTATED desk shape.
+     * For non-zero rotations, transforms the four corners through the
+     * desk's AffineTransform and computes the enclosing AABB. Used by
+     * collision + clamping so rotated desks can't clip off the grid or
+     * overlap other items.
+     */
+    public Rectangle2D getRotatedBounds(int gridSize) {
+        if (rotation == 0) return getBounds(gridSize);
+        AffineTransform at = getTransform(gridSize);
+        double w = getWidthInCells() * gridSize;
+        double h = getHeightInCells() * gridSize;
+        double[] corners = {0, 0, w, 0, w, h, 0, h};
+        at.transform(corners, 0, corners, 0, 4);
+        double minX = corners[0], maxX = corners[0];
+        double minY = corners[1], maxY = corners[1];
+        for (int i = 2; i < 8; i += 2) {
+            minX = Math.min(minX, corners[i]);
+            maxX = Math.max(maxX, corners[i]);
+        }
+        for (int i = 3; i < 8; i += 2) {
+            minY = Math.min(minY, corners[i]);
+            maxY = Math.max(maxY, corners[i]);
+        }
+        return new Rectangle2D.Double(minX, minY, maxX - minX, maxY - minY);
+    }
+
+    /**
      * Checks whether this desk's bounding box overlaps another desk.
      *
      * @param other the other desk to check

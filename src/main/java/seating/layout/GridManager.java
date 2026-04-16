@@ -44,11 +44,31 @@ public class GridManager {
      * @return array of [clampedGx, clampedGy]
      */
     public int[] clampToClassroom(Desk desk, int gx, int gy) {
-        int maxX = classroom.getGridColumns() - desk.getWidthInCells();
-        int maxY = classroom.getGridRows() - desk.getHeightInCells();
-        gx = Math.max(0, Math.min(gx, maxX));
-        gy = Math.max(0, Math.min(gy, maxY));
-        return new int[] { gx, gy };
+        // Rotation-aware clamp: use getRotatedBounds so a rotated desk's
+        // actual visual footprint stays inside the grid.
+        int gs = classroom.getGridSize();
+        int cols = classroom.getGridColumns();
+        int rows = classroom.getGridRows();
+        int origX = desk.getGridX();
+        int origY = desk.getGridY();
+        desk.setPosition(gx, gy);
+        java.awt.geom.Rectangle2D rb = desk.getRotatedBounds(gs);
+        desk.setPosition(origX, origY);
+
+        int rbLeft = (int) Math.floor(rb.getX() / gs);
+        int rbTop = (int) Math.floor(rb.getY() / gs);
+        int rbRight = (int) Math.ceil((rb.getX() + rb.getWidth()) / gs);
+        int rbBottom = (int) Math.ceil((rb.getY() + rb.getHeight()) / gs);
+
+        int shiftX = 0;
+        if (rbLeft < 0) shiftX = -rbLeft;
+        else if (rbRight > cols) shiftX = cols - rbRight;
+
+        int shiftY = 0;
+        if (rbTop < 0) shiftY = -rbTop;
+        else if (rbBottom > rows) shiftY = rows - rbBottom;
+
+        return new int[] { gx + shiftX, gy + shiftY };
     }
 
     /**

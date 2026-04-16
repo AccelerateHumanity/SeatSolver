@@ -27,6 +27,8 @@ public class MainFrame extends JFrame {
     private JTabbedPane sidePanel;
     private JLabel statusLabel;
     private JButton undoBtn, redoBtn, generateBtn;
+    // Initial classroom snapshot — captured after defaults load, used by Reset
+    private seating.layout.ResetCommand.Snapshot initialSnapshot;
 
     /**
      * Creates the main application frame.
@@ -68,6 +70,10 @@ public class MainFrame extends JFrame {
 
         buildUI();
         addDefaultZones();
+
+        // Capture the "initial layout" now so the Reset button can restore
+        // this state after the user has modified things.
+        initialSnapshot = seating.layout.ResetCommand.Snapshot.capture(classroom);
 
         pack();
         setMinimumSize(UIScale.dimension(900, 600));
@@ -295,6 +301,29 @@ public class MainFrame extends JFrame {
                 });
                 popup.add(clearArrangement);
 
+                popup.addSeparator();
+
+                JMenuItem resetItem = new JMenuItem("Reset to Initial Layout");
+                resetItem.setToolTipText("Revert classroom to the starting configuration (undoable)");
+                resetItem.addActionListener(new java.awt.event.ActionListener() {
+                    public void actionPerformed(java.awt.event.ActionEvent ae) {
+                        if (initialSnapshot == null) return;
+                        int r = JOptionPane.showConfirmDialog(MainFrame.this,
+                            "Revert to the initial classroom layout?",
+                            "Reset", JOptionPane.YES_NO_OPTION);
+                        if (r != JOptionPane.YES_OPTION) return;
+                        undoManager.execute(new seating.layout.ResetCommand(classroom, initialSnapshot));
+                        classroomPanel.clearSelection();
+                        classroomPanel.invalidateArrangement();
+                        classroomPanel.setPreferredSize(new java.awt.Dimension(
+                            classroom.getPixelWidth(), classroom.getPixelHeight()));
+                        classroomPanel.revalidate();
+                        classroomPanel.repaint();
+                        updateStatus();
+                    }
+                });
+                popup.add(resetItem);
+
                 popup.show(clearBtn, 0, clearBtn.getHeight());
             }
         });
@@ -351,10 +380,10 @@ public class MainFrame extends JFrame {
             new Color(76, 175, 80)));
         classroom.addZone(new Zone("Back", 0, rows - 4,
             cols, 4, new Color(33, 150, 243)));
-        // Default landmarks
-        int screenW = Math.min(10, cols - 4);
+        // Default landmarks — sizes MATCH the palette (screen 8×2, door 2×3)
+        int screenW = 8;
         classroom.addLandmark(new Landmark(Landmark.SCREEN,
-            (cols - screenW) / 2, 0, screenW, 2));
+            Math.max(0, (cols - screenW) / 2), 0, screenW, 2));
         classroom.addLandmark(new Landmark(Landmark.DOOR, 0, rows - 3, 2, 3));
     }
 
@@ -506,11 +535,14 @@ public class MainFrame extends JFrame {
         CSPSolver solver = new CSPSolver(constraintSet, graph, 5, 5000);
         SolverResult result = solver.solve(students, seats);
 
-        // Pass constraint data to canvas for conflict overlay
-        classroomPanel.setConstraintData(constraintSet, graph);
-
-        // Show results
-        arrangementPanel.setResult(result, constraintSet, graph);
+        // Capture previous state BEFORE swapping — makes the generate undoable
+        seating.solver.SolverResult oldResult = arrangementPanel.getResult();
+        ConstraintSet oldCs = classroomPanel.getConstraintSet();
+        SeatGraph oldGraph = classroomPanel.getSeatGraph();
+        undoManager.execute(new seating.layout.GenerateSeatingCommand(
+            classroomPanel, arrangementPanel,
+            result, constraintSet, graph,
+            oldResult, oldCs, oldGraph));
         sidePanel.setSelectedIndex(2); // switch to Results tab
 
         if (result.isEmpty()) {

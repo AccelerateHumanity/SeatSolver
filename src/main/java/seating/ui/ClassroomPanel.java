@@ -59,6 +59,13 @@ public class ClassroomPanel extends JPanel {
 
     // Manual student seat drag (post-generation)
     private Student draggedStudent;
+    // Zone drag-to-move state
+    private Zone draggedZone;
+    private int zoneDragOffsetX, zoneDragOffsetY; // click offset in grid cells
+    private int zoneDragStartGx, zoneDragStartGy; // start position for undo
+    // Multi-duplicate ghost batch: copies follow cursor as a group
+    private java.util.List<Desk> pendingDuplicates;
+    private int[] pendingDupOffsetsGx, pendingDupOffsetsGy; // offset from cursor per copy
     private Seat draggedStudentSourceSeat;
     private int draggedStudentX, draggedStudentY;
 
@@ -155,6 +162,16 @@ public class ClassroomPanel extends JPanel {
                     int[] clamped = gridManager.clampLandmarkToClassroom(ghostLandmark, snapped[0], snapped[1]);
                     ghostLandmark.setPosition(clamped[0], clamped[1]);
                     repaint();
+                } else if (pendingDuplicates != null) {
+                    int[] snapped = gridManager.snapToGrid(mouseX, mouseY);
+                    int anchorGx = snapped[0];
+                    int anchorGy = snapped[1];
+                    for (int i = 0; i < pendingDuplicates.size(); i++) {
+                        Desk d = pendingDuplicates.get(i);
+                        d.setPosition(anchorGx + pendingDupOffsetsGx[i],
+                                      anchorGy + pendingDupOffsetsGy[i]);
+                    }
+                    repaint();
                 }
             }
 
@@ -165,6 +182,10 @@ public class ClassroomPanel extends JPanel {
                 }
                 if (ghostLandmark != null && SwingUtilities.isLeftMouseButton(e)) {
                     placeGhostLandmark();
+                    return;
+                }
+                if (pendingDuplicates != null && SwingUtilities.isLeftMouseButton(e)) {
+                    commitPendingDuplicates();
                     return;
                 }
                 if (SwingUtilities.isRightMouseButton(e)) {
@@ -181,25 +202,70 @@ public class ClassroomPanel extends JPanel {
             public void mouseWheelMoved(MouseWheelEvent e) {
                 if (discoMode) return;
                 double amount = e.getWheelRotation() * 15.0;
+
+                // Ghost placement: rotate the in-flight preview (no command; ghost
+                // isn't persisted until placed).
+                if (ghostDesk != null) {
+                    ghostDesk.rotate(amount);
+                    snapDeskIntoBounds(ghostDesk);
+                    repaint();
+                    return;
+                }
+                if (ghostLandmark != null) {
+                    ghostLandmark.rotate(amount);
+                    snapLandmarkIntoBounds(ghostLandmark);
+                    repaint();
+                    return;
+                }
+
                 if (!selectedDesks.isEmpty() || !selectedLandmarks.isEmpty()) {
-                    // Rotate entire multi-selection (desks + landmarks)
+                    // Rotate entire multi-selection as a SINGLE compound command
+                    // so one undo click reverts all of them together.
+                    java.util.List<Command> batch = new java.util.ArrayList<Command>();
                     for (Desk d : selectedDesks) {
-                        undoManager.execute(new RotateDeskCommand(d, amount));
+                        Command rc = new RotateDeskCommand(d, amount);
+                        rc.execute();
                         snapDeskIntoBounds(d);
+                        if (classroom.hasCollision(d, d)) {
+                            rc.undo();  // collision — revert
+                            continue;
+                        }
+                        batch.add(rc);
                     }
                     for (Landmark lm : selectedLandmarks) {
-                        // Landmarks rotate in 90-degree increments via AffineTransform
-                        undoManager.execute(new RotateLandmarkCommand(lm, amount));
+                        Command rc = new RotateLandmarkCommand(lm, amount);
+                        rc.execute();
                         snapLandmarkIntoBounds(lm);
+                        if (classroom.hasLandmarkCollision(lm, lm)) {
+                            rc.undo();
+                            continue;
+                        }
+                        batch.add(rc);
+                    }
+                    if (!batch.isEmpty()) {
+                        undoManager.pushExecuted(new seating.layout.CompoundCommand(
+                            batch, "Rotate " + batch.size() + " items"));
                     }
                     repaint();
                 } else if (selectedDesk != null) {
-                    undoManager.execute(new RotateDeskCommand(selectedDesk, amount));
+                    Command rc = new RotateDeskCommand(selectedDesk, amount);
+                    rc.execute();
                     snapDeskIntoBounds(selectedDesk);
+                    if (classroom.hasCollision(selectedDesk, selectedDesk)) {
+                        rc.undo();  // revert into collision
+                    } else {
+                        undoManager.pushExecuted(rc);
+                    }
                     repaint();
                 } else if (selectedLandmark != null) {
-                    undoManager.execute(new RotateLandmarkCommand(selectedLandmark, amount));
+                    Command rc = new RotateLandmarkCommand(selectedLandmark, amount);
+                    rc.execute();
                     snapLandmarkIntoBounds(selectedLandmark);
+                    if (classroom.hasLandmarkCollision(selectedLandmark, selectedLandmark)) {
+                        rc.undo();
+                    } else {
+                        undoManager.pushExecuted(rc);
+                    }
                     repaint();
                 }
             }
@@ -253,6 +319,10 @@ public class ClassroomPanel extends JPanel {
             public void actionPerformed(ActionEvent e) {
                 ghostDesk = null;
                 ghostLandmark = null;
+                pendingDuplicates = null;
+                pendingDupOffsetsGx = null;
+                pendingDupOffsetsGy = null;
+                draggedZone = null;
                 selectedDesk = null;
                 selectedLandmark = null;
                 selectedDesks.clear();
@@ -406,8 +476,7 @@ public class ClassroomPanel extends JPanel {
                         }
                     }
 
-                    // Landmark physics: wall bounce + rotation accumulate (no
-                    // cross-collisions with desks — kept simple)
+                    // Landmark physics: wall bounce + rotation accumulate
                     java.util.List<Landmark> lms2 = classroom.getLandmarks();
                     int nL2 = Math.min(lms2.size(), discoLmPx.length);
                     for (int i = 0; i < nL2; i++) {
@@ -420,6 +489,62 @@ public class ClassroomPanel extends JPanel {
                         if (discoLmPx[i] + lw >= maxW) { discoLmPx[i] = maxW - lw; discoLmDx[i] = -Math.abs(discoLmDx[i]); }
                         if (discoLmPy[i] <= 0) { discoLmPy[i] = 0; discoLmDy[i] = Math.abs(discoLmDy[i]); }
                         if (discoLmPy[i] + lh >= maxH) { discoLmPy[i] = maxH - lh; discoLmDy[i] = -Math.abs(discoLmDy[i]); }
+                    }
+
+                    // Landmark-landmark elastic collisions
+                    for (int i = 0; i < nL2; i++) {
+                        int w1 = lms2.get(i).getGridW() * gs2;
+                        int h1 = lms2.get(i).getGridH() * gs2;
+                        double cx1 = discoLmPx[i] + w1 / 2.0;
+                        double cy1 = discoLmPy[i] + h1 / 2.0;
+                        for (int j = i + 1; j < nL2; j++) {
+                            int w2 = lms2.get(j).getGridW() * gs2;
+                            int h2 = lms2.get(j).getGridH() * gs2;
+                            double cx2 = discoLmPx[j] + w2 / 2.0;
+                            double cy2 = discoLmPy[j] + h2 / 2.0;
+                            double dx = cx2 - cx1, dy = cy2 - cy1;
+                            double minDist = (Math.max(w1, h1) + Math.max(w2, h2)) / 2.5;
+                            double dist = Math.sqrt(dx * dx + dy * dy);
+                            if (dist < minDist && dist > 0.1) {
+                                double nx = dx / dist, ny = dy / dist;
+                                double rv = (discoLmDx[i] - discoLmDx[j]) * nx + (discoLmDy[i] - discoLmDy[j]) * ny;
+                                if (rv > 0) {
+                                    discoLmDx[i] -= rv * nx; discoLmDy[i] -= rv * ny;
+                                    discoLmDx[j] += rv * nx; discoLmDy[j] += rv * ny;
+                                }
+                                double push = (minDist - dist) / 2 + 0.5;
+                                discoLmPx[i] -= nx * push; discoLmPy[i] -= ny * push;
+                                discoLmPx[j] += nx * push; discoLmPy[j] += ny * push;
+                            }
+                        }
+                    }
+
+                    // Landmark-desk cross collisions
+                    for (int i = 0; i < nL2; i++) {
+                        int lw = lms2.get(i).getGridW() * gs2;
+                        int lh = lms2.get(i).getGridH() * gs2;
+                        double cx1 = discoLmPx[i] + lw / 2.0;
+                        double cy1 = discoLmPy[i] + lh / 2.0;
+                        for (int j = 0; j < n2; j++) {
+                            int dw = dks.get(j).getWidthInCells() * gs2;
+                            int dh = dks.get(j).getHeightInCells() * gs2;
+                            double cx2 = discoPx[j] + dw / 2.0;
+                            double cy2 = discoPy[j] + dh / 2.0;
+                            double dx = cx2 - cx1, dy = cy2 - cy1;
+                            double minDist = (Math.max(lw, lh) + Math.max(dw, dh)) / 2.5;
+                            double dist = Math.sqrt(dx * dx + dy * dy);
+                            if (dist < minDist && dist > 0.1) {
+                                double nx = dx / dist, ny = dy / dist;
+                                double rv = (discoLmDx[i] - discoDx[j]) * nx + (discoLmDy[i] - discoDy[j]) * ny;
+                                if (rv > 0) {
+                                    discoLmDx[i] -= rv * nx; discoLmDy[i] -= rv * ny;
+                                    discoDx[j] += rv * nx; discoDy[j] += rv * ny;
+                                }
+                                double push = (minDist - dist) / 2 + 0.5;
+                                discoLmPx[i] -= nx * push; discoLmPy[i] -= ny * push;
+                                discoPx[j] += nx * push; discoPy[j] += ny * push;
+                            }
+                        }
                     }
 
                     discoHue = (discoHue + 0.003f) % 1.0f;
@@ -460,7 +585,7 @@ public class ClassroomPanel extends JPanel {
             repaint();
             return;
         }
-        if (ghostDesk != null || ghostLandmark != null) return;
+        if (ghostDesk != null || ghostLandmark != null || pendingDuplicates != null) return;
         requestFocusInWindow();
 
         // Student drag (post-generation): if a seat is occupied and clicked,
@@ -482,6 +607,16 @@ public class ClassroomPanel extends JPanel {
         }
 
         Desk hit = classroom.getDeskAt(toModelX(e.getX()), toModelY(e.getY()));
+
+        // Ctrl+click on a desk → toggle it in multi-selection (add/remove)
+        if (hit != null && SwingUtilities.isLeftMouseButton(e) && e.isControlDown()) {
+            if (selectedDesks.contains(hit)) selectedDesks.remove(hit);
+            else selectedDesks.add(hit);
+            selectedDesk = null;
+            selectedLandmark = null;
+            repaint();
+            return;
+        }
 
         // If clicking on a desk that's part of multi-selection, start group drag
         if (hit != null && selectedDesks.contains(hit) && SwingUtilities.isLeftMouseButton(e)) {
@@ -506,6 +641,15 @@ public class ClassroomPanel extends JPanel {
         } else if (SwingUtilities.isLeftMouseButton(e)) {
             // Check landmarks
             Landmark lmHit = classroom.getLandmarkAt(toModelX(e.getX()), toModelY(e.getY()));
+            // Ctrl+click on a landmark → toggle in multi-selection
+            if (lmHit != null && e.isControlDown()) {
+                if (selectedLandmarks.contains(lmHit)) selectedLandmarks.remove(lmHit);
+                else selectedLandmarks.add(lmHit);
+                selectedDesk = null;
+                selectedLandmark = null;
+                repaint();
+                return;
+            }
             // If clicking a landmark that's in multi-select, start group drag
             if (lmHit != null && selectedLandmarks.contains(lmHit)) {
                 isMultiDragging = true;
@@ -525,16 +669,39 @@ public class ClassroomPanel extends JPanel {
                 lmDragOffsetX = toModelX(e.getX()) - lmHit.getGridX() * gs;
                 lmDragOffsetY = toModelY(e.getY()) - lmHit.getGridY() * gs;
             } else {
-                // Empty space click — start rectangle selection
-                selectedDesk = null;
-                selectedLandmark = null;
-                selectedDesks.clear();
-                selectedLandmarks.clear();
-                isRectSelecting = true;
-                rectSelStartX = toModelX(e.getX());
-                rectSelStartY = toModelY(e.getY());
-                rectSelEndX = toModelX(e.getX());
-                rectSelEndY = toModelY(e.getY());
+                // Empty of desks/landmarks — check for zone drag-to-move first.
+                int gs = classroom.getGridSize();
+                int mx = toModelX(e.getX());
+                int my = toModelY(e.getY());
+                Zone hitZone = null;
+                // Topmost zone at click (last added = drawn on top)
+                java.util.List<Zone> zs = classroom.getZones();
+                for (int i = zs.size() - 1; i >= 0; i--) {
+                    Zone z = zs.get(i);
+                    if (z.getBounds(gs).contains(mx, my)) { hitZone = z; break; }
+                }
+                if (hitZone != null) {
+                    draggedZone = hitZone;
+                    zoneDragOffsetX = mx / gs - hitZone.getGridX();
+                    zoneDragOffsetY = my / gs - hitZone.getGridY();
+                    zoneDragStartGx = hitZone.getGridX();
+                    zoneDragStartGy = hitZone.getGridY();
+                    selectedDesk = null;
+                    selectedLandmark = null;
+                    selectedDesks.clear();
+                    selectedLandmarks.clear();
+                } else {
+                    // True empty space — start rectangle selection
+                    selectedDesk = null;
+                    selectedLandmark = null;
+                    selectedDesks.clear();
+                    selectedLandmarks.clear();
+                    isRectSelecting = true;
+                    rectSelStartX = mx;
+                    rectSelStartY = my;
+                    rectSelEndX = mx;
+                    rectSelEndY = my;
+                }
             }
             repaint();
         }
@@ -547,6 +714,24 @@ public class ClassroomPanel extends JPanel {
             draggedStudentX = toModelX(e.getX());
             draggedStudentY = toModelY(e.getY());
             repaint();
+            return;
+        }
+        // Move a zone that's being dragged — clamped inside the grid
+        if (draggedZone != null) {
+            int gs = classroom.getGridSize();
+            int mx = toModelX(e.getX()) / gs;
+            int my = toModelY(e.getY()) / gs;
+            int newGx = mx - zoneDragOffsetX;
+            int newGy = my - zoneDragOffsetY;
+            int cols = classroom.getGridColumns();
+            int rows = classroom.getGridRows();
+            newGx = Math.max(0, Math.min(newGx, cols - draggedZone.getGridWidth()));
+            newGy = Math.max(0, Math.min(newGy, rows - draggedZone.getGridHeight()));
+            if (newGx != draggedZone.getGridX() || newGy != draggedZone.getGridY()) {
+                draggedZone.setBounds(newGx, newGy,
+                    draggedZone.getGridWidth(), draggedZone.getGridHeight());
+                repaint();
+            }
             return;
         }
         if (isMultiDragging && (!selectedDesks.isEmpty() || !selectedLandmarks.isEmpty())) {
@@ -652,6 +837,23 @@ public class ClassroomPanel extends JPanel {
 
     private void handleMouseRelease(MouseEvent e) {
         if (discoMode) return;
+        // Drop a dragged zone — if it actually moved, commit an EditZoneCommand
+        if (draggedZone != null) {
+            int newGx = draggedZone.getGridX();
+            int newGy = draggedZone.getGridY();
+            if (newGx != zoneDragStartGx || newGy != zoneDragStartGy) {
+                // Revert to start so the EditZoneCommand's execute() re-applies the move
+                draggedZone.setBounds(zoneDragStartGx, zoneDragStartGy,
+                    draggedZone.getGridWidth(), draggedZone.getGridHeight());
+                undoManager.execute(new seating.layout.EditZoneCommand(draggedZone,
+                    draggedZone.getLabel(), newGx, newGy,
+                    draggedZone.getGridWidth(), draggedZone.getGridHeight(),
+                    draggedZone.getColor()));
+            }
+            draggedZone = null;
+            repaint();
+            return;
+        }
         // Drop a dragged student onto a target seat (swap or move)
         if (draggedStudent != null) {
             Seat target = getSeatAt(toModelX(e.getX()), toModelY(e.getY()));
@@ -780,6 +982,44 @@ public class ClassroomPanel extends JPanel {
         repaint();
     }
 
+    /** Commits the pending multi-duplicate batch as a single compound command. */
+    private void commitPendingDuplicates() {
+        if (pendingDuplicates == null || pendingDuplicates.isEmpty()) return;
+        int cols = classroom.getGridColumns();
+        int rows = classroom.getGridRows();
+        java.util.List<Command> batch = new java.util.ArrayList<Command>();
+        int skipped = 0;
+        for (Desk copy : pendingDuplicates) {
+            int gx = copy.getGridX();
+            int gy = copy.getGridY();
+            int dw = copy.getWidthInCells();
+            int dh = copy.getHeightInCells();
+            if (gx < 0 || gy < 0 || gx + dw > cols || gy + dh > rows ||
+                classroom.hasCollision(copy, null)) {
+                skipped++;
+                continue;
+            }
+            AddDeskCommand ac = new AddDeskCommand(classroom, copy);
+            ac.execute();
+            batch.add(ac);
+        }
+        if (!batch.isEmpty()) {
+            undoManager.pushExecuted(new seating.layout.CompoundCommand(
+                batch, "Duplicate " + batch.size() + " desks"));
+            invalidateArrangement();
+        }
+        pendingDuplicates = null;
+        pendingDupOffsetsGx = null;
+        pendingDupOffsetsGy = null;
+        setCursor(Cursor.getDefaultCursor());
+        if (skipped > 0) {
+            JOptionPane.showMessageDialog(this,
+                "Placed " + batch.size() + " copy/copies. " + skipped + " skipped (no room or collision).",
+                "Duplicate", JOptionPane.INFORMATION_MESSAGE);
+        }
+        repaint();
+    }
+
     private void placeGhostLandmark() {
         if (ghostLandmark == null) return;
         int[] clamped = gridManager.clampLandmarkToClassroom(
@@ -846,35 +1086,29 @@ public class ClassroomPanel extends JPanel {
             JMenuItem dupAll = new JMenuItem("Duplicate Desks (" + selectedDesks.size() + ")");
             dupAll.addActionListener(new ActionListener() {
                 public void actionPerformed(ActionEvent ae) {
+                    // Build a batch of copies that follow the cursor as a group,
+                    // preserving the original layout's relative spacing. One
+                    // click commits them all (Phase 6c).
                     java.util.ArrayList<Desk> copies = new java.util.ArrayList<Desk>();
-                    int skipped = 0;
-                    int cols = classroom.getGridColumns();
-                    int rows = classroom.getGridRows();
-                    for (Desk d : selectedDesks) {
-                        int gx = d.getGridX() + d.getWidthInCells();
-                        int gy = d.getGridY();
-                        Desk copy = DeskPalette.createDesk(d.getTypeName(), gx, gy);
-                        if (copy == null) { skipped++; continue; }
+                    int[] offX = new int[selectedDesks.size()];
+                    int[] offY = new int[selectedDesks.size()];
+                    int anchorGx = selectedDesks.get(0).getGridX();
+                    int anchorGy = selectedDesks.get(0).getGridY();
+                    for (int i = 0; i < selectedDesks.size(); i++) {
+                        Desk d = selectedDesks.get(i);
+                        Desk copy = DeskPalette.createDesk(d.getTypeName(),
+                            d.getGridX(), d.getGridY());
+                        if (copy == null) continue;
                         copy.setRotation(d.getRotation());
-                        int dw = copy.getWidthInCells();
-                        int dh = copy.getHeightInCells();
-                        if (gx + dw > cols || gy + dh > rows ||
-                            classroom.hasCollision(copy, null)) {
-                            skipped++;
-                            continue;
-                        }
-                        undoManager.execute(new AddDeskCommand(classroom, copy));
                         copies.add(copy);
+                        offX[copies.size() - 1] = d.getGridX() - anchorGx;
+                        offY[copies.size() - 1] = d.getGridY() - anchorGy;
                     }
-                    if (!copies.isEmpty()) {
-                        selectedDesks.clear();
-                        selectedDesks.addAll(copies);
-                    }
-                    if (skipped > 0) {
-                        JOptionPane.showMessageDialog(ClassroomPanel.this,
-                            skipped + " copy/copies skipped (no room or collision).",
-                            "Duplicate", JOptionPane.INFORMATION_MESSAGE);
-                    }
+                    if (copies.isEmpty()) return;
+                    pendingDuplicates = copies;
+                    pendingDupOffsetsGx = java.util.Arrays.copyOf(offX, copies.size());
+                    pendingDupOffsetsGy = java.util.Arrays.copyOf(offY, copies.size());
+                    setCursor(Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR));
                     repaint();
                 }
             });
@@ -895,11 +1129,38 @@ public class ClassroomPanel extends JPanel {
             }
         }
 
-        // Check zones
-        for (final Zone zone : classroom.getZones()) {
-            if (zone.getBounds(gs).contains(toModelX(e.getX()), toModelY(e.getY()))) {
-                if (classroom.getDeskAt(toModelX(e.getX()), toModelY(e.getY())) != null) break;
-                showZoneContextMenu(e, zone);
+        // Check zones — collect ALL at this point so overlapping zones can
+        // be disambiguated via a submenu.
+        if (classroom.getDeskAt(toModelX(e.getX()), toModelY(e.getY())) == null) {
+            java.util.List<Zone> zonesAtPoint = new java.util.ArrayList<Zone>();
+            for (Zone zone : classroom.getZones()) {
+                if (zone.getBounds(gs).contains(toModelX(e.getX()), toModelY(e.getY()))) {
+                    zonesAtPoint.add(zone);
+                }
+            }
+            if (zonesAtPoint.size() == 1) {
+                showZoneContextMenu(e, zonesAtPoint.get(0));
+                return;
+            } else if (zonesAtPoint.size() > 1) {
+                // Show a picker submenu: "Edit which zone?"
+                final MouseEvent origE = e;
+                JPopupMenu picker = new JPopupMenu();
+                JMenuItem header = new JMenuItem("Edit which zone?");
+                header.setEnabled(false);
+                header.setFont(UIScale.font("SansSerif", Font.BOLD, 12));
+                picker.add(header);
+                picker.addSeparator();
+                for (final Zone z : zonesAtPoint) {
+                    JMenuItem item = new JMenuItem(z.getLabel() + "  ("
+                        + z.getGridWidth() + "\u00D7" + z.getGridHeight() + ")");
+                    item.addActionListener(new ActionListener() {
+                        public void actionPerformed(ActionEvent ae) {
+                            showZoneContextMenu(origE, z);
+                        }
+                    });
+                    picker.add(item);
+                }
+                picker.show(this, e.getX(), e.getY());
                 return;
             }
         }
@@ -1072,7 +1333,7 @@ public class ClassroomPanel extends JPanel {
             }
         });
 
-        JMenuItem resizeItem = new JMenuItem("Resize Zone...");
+        JMenuItem resizeItem = new JMenuItem("Move / Resize Zone...");
         resizeItem.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent ae) {
                 int maxCols = classroom.getGridColumns();
@@ -1081,16 +1342,36 @@ public class ClassroomPanel extends JPanel {
                 JSpinner ySpin = new JSpinner(new SpinnerNumberModel(zone.getGridY(), 0, maxRows - 1, 1));
                 JSpinner wSpin = new JSpinner(new SpinnerNumberModel(zone.getGridWidth(), 1, maxCols, 1));
                 JSpinner hSpin = new JSpinner(new SpinnerNumberModel(zone.getGridHeight(), 1, maxRows, 1));
-                JPanel panel = new JPanel(new java.awt.GridLayout(4, 2, 5, 5));
-                panel.add(new JLabel("X (col):")); panel.add(xSpin);
-                panel.add(new JLabel("Y (row):")); panel.add(ySpin);
-                panel.add(new JLabel("Width:")); panel.add(wSpin);
-                panel.add(new JLabel("Height:")); panel.add(hSpin);
+
+                xSpin.setToolTipText("Left edge column (0 = far left of classroom)");
+                ySpin.setToolTipText("Top edge row (0 = front of classroom)");
+                wSpin.setToolTipText("Number of grid columns the zone spans");
+                hSpin.setToolTipText("Number of grid rows the zone spans");
+
+                // Header line showing current zone coverage
+                JLabel info = new JLabel("<html><i>Current: col "
+                    + zone.getGridX() + "\u2013" + (zone.getGridX() + zone.getGridWidth() - 1)
+                    + ", row " + zone.getGridY() + "\u2013" + (zone.getGridY() + zone.getGridHeight() - 1)
+                    + " &nbsp;&nbsp; Room: " + maxCols + "\u00D7" + maxRows + "</i></html>");
+                info.setBorder(BorderFactory.createEmptyBorder(0, 0, 6, 0));
+
+                JPanel grid = new JPanel(new java.awt.GridLayout(4, 2, 5, 5));
+                grid.add(new JLabel("Left column (X):")); grid.add(xSpin);
+                grid.add(new JLabel("Top row (Y):")); grid.add(ySpin);
+                grid.add(new JLabel("Width (cols):")); grid.add(wSpin);
+                grid.add(new JLabel("Height (rows):")); grid.add(hSpin);
+
+                JPanel panel = new JPanel(new java.awt.BorderLayout());
+                panel.add(info, java.awt.BorderLayout.NORTH);
+                panel.add(grid, java.awt.BorderLayout.CENTER);
+
                 int result = JOptionPane.showConfirmDialog(ClassroomPanel.this, panel,
-                    "Resize Zone: " + zone.getLabel(), JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+                    "Move / Resize Zone: " + zone.getLabel(),
+                    JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
                 if (result == JOptionPane.OK_OPTION) {
-                    int nx = (Integer) xSpin.getValue();
-                    int ny = (Integer) ySpin.getValue();
+                    int nx = Math.max(0, Math.min((Integer) xSpin.getValue(), maxCols - 1));
+                    int ny = Math.max(0, Math.min((Integer) ySpin.getValue(), maxRows - 1));
+                    // Clamp width/height so zone stays entirely inside grid
                     int nw = Math.max(1, Math.min((Integer) wSpin.getValue(), maxCols - nx));
                     int nh = Math.max(1, Math.min((Integer) hSpin.getValue(), maxRows - ny));
                     undoManager.execute(new seating.layout.EditZoneCommand(zone,
@@ -1371,6 +1652,10 @@ public class ClassroomPanel extends JPanel {
     }
 
     public Desk getSelectedDesk() { return selectedDesk; }
+    /** Exposes the currently-displayed arrangement + constraint refs for undo capture. */
+    public SeatingArrangement getCurrentArrangement() { return currentArrangement; }
+    public ConstraintSet getConstraintSet() { return constraintSet; }
+    public SeatGraph getSeatGraph() { return seatGraph; }
 
     /** Clamps a desk's position so its (possibly rotated) footprint stays in the grid. */
     private void snapDeskIntoBounds(Desk d) {
@@ -1411,8 +1696,12 @@ public class ClassroomPanel extends JPanel {
         isDraggingLandmark = false;
         isRectSelecting = false;
         draggedStudent = null;
+        draggedZone = null;
         ghostDesk = null;
         ghostLandmark = null;
+        pendingDuplicates = null;
+        pendingDupOffsetsGx = null;
+        pendingDupOffsetsGy = null;
         setCursor(Cursor.getDefaultCursor());
     }
     public Classroom getClassroom() { return classroom; }
@@ -1523,6 +1812,19 @@ public class ClassroomPanel extends JPanel {
         if (!discoMode && ghostLandmark != null) {
             drawGhostLandmark(g, gs);
         }
+        if (!discoMode && pendingDuplicates != null) {
+            AffineTransform savedAT = g.getTransform();
+            Composite savedC = g.getComposite();
+            g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.5f));
+            for (Desk d : pendingDuplicates) {
+                AffineTransform sv = g.getTransform();
+                g.transform(d.getTransform(gs));
+                d.draw(g, gs);
+                g.setTransform(sv);
+            }
+            g.setComposite(savedC);
+            g.setTransform(savedAT);
+        }
         if (!discoMode && selectedDesk != null && ghostDesk == null) {
             drawSelection(g, gs);
         }
@@ -1631,14 +1933,31 @@ public class ClassroomPanel extends JPanel {
             g.drawString(pendingZoneLabel, rx + 4, ry + 15);
         }
 
-        // Draw empty state hint
+        // Draw empty state hint — auto-wraps to fit narrow rooms
         if (classroom.getDesks().isEmpty() && ghostDesk == null && !zoneDrawMode) {
             g.setColor(new Color(160, 160, 170));
             g.setFont(UIScale.font("SansSerif", Font.PLAIN, 16));
-            String hint = "Click a desk type in the palette, then click here to place it.";
             FontMetrics fmHint = g.getFontMetrics();
-            g.drawString(hint, (classroom.getPixelWidth() - fmHint.stringWidth(hint)) / 2,
-                classroom.getPixelHeight() / 2);
+            int hintPw = classroom.getPixelWidth();
+            int hintPh = classroom.getPixelHeight();
+            String[] lines;
+            String full = "Click a desk type in the palette, then click here to place it.";
+            if (fmHint.stringWidth(full) + 40 > hintPw) {
+                // Wrap onto two lines
+                lines = new String[] {
+                    "Click a desk type in the palette,",
+                    "then click here to place it."
+                };
+            } else {
+                lines = new String[] { full };
+            }
+            int lineH = fmHint.getHeight();
+            int totalH = lineH * lines.length;
+            int hy = hintPh / 2 - totalH / 2 + fmHint.getAscent();
+            for (String ln : lines) {
+                g.drawString(ln, (hintPw - fmHint.stringWidth(ln)) / 2, hy);
+                hy += lineH;
+            }
         }
 
         // Disco rays overlay

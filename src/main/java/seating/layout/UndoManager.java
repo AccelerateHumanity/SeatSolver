@@ -30,9 +30,20 @@ public class UndoManager {
      */
     public void execute(Command cmd) {
         cmd.execute();
+        pushExecuted(cmd);
+    }
+
+    /**
+     * Registers a command that was ALREADY executed (its state mutation is
+     * already applied). Useful when a caller wants to mutate state first,
+     * inspect the result, and only then commit to the undo stack — for
+     * example after collision-check-then-rollback logic during rotation.
+     *
+     * @param cmd the already-executed command to register for undo
+     */
+    public void pushExecuted(Command cmd) {
         undoStack.push(cmd);
         redoStack.clear();
-        // Cap undo history at 100 to prevent unbounded memory growth
         while (undoStack.size() > 100) {
             undoStack.remove(0);
         }

@@ -301,9 +301,13 @@ public class DeskPalette extends JPanel {
         if (result == JOptionPane.OK_OPTION) {
             int cols = (Integer) colSpinner.getValue();
             int rows = (Integer) rowSpinner.getValue();
-            room.resize(cols, rows);
+            // Wrap in a command so Ctrl+Z undoes the room resize
+            canvasPanel.getUndoManager().execute(
+                new seating.layout.ResizeRoomCommand(room, cols, rows));
             canvasPanel.setPreferredSize(new java.awt.Dimension(
                 room.getPixelWidth(), room.getPixelHeight()));
+            canvasPanel.clearSelection();
+            canvasPanel.invalidateArrangement();
             canvasPanel.revalidate();
             canvasPanel.repaint();
         }

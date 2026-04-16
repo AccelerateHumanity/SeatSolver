@@ -7,6 +7,8 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.util.List;
 
 /**
@@ -47,6 +49,12 @@ public class ConstraintPanel extends JPanel {
         listModel = new DefaultListModel<String>();
         constraintList = new JList<String>(listModel);
         constraintList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        // Double-click a rule to edit it
+        constraintList.addMouseListener(new MouseAdapter() {
+            public void mouseClicked(MouseEvent e) {
+                if (e.getClickCount() == 2) editRule();
+            }
+        });
         add(new JScrollPane(constraintList), BorderLayout.CENTER);
 
         // Buttons
@@ -71,6 +79,12 @@ public class ConstraintPanel extends JPanel {
             public void actionPerformed(ActionEvent e) { addBalanceRule(); }
         });
 
+        JButton editBtn = new JButton("Edit");
+        editBtn.setToolTipText("Select a rule, then click to edit it (or double-click the rule)");
+        editBtn.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent e) { editRule(); }
+        });
+
         JButton deleteBtn = new JButton("Delete");
         deleteBtn.setToolTipText("Select a rule, then click to delete it");
         deleteBtn.addActionListener(new ActionListener() {
@@ -80,6 +94,7 @@ public class ConstraintPanel extends JPanel {
         buttonPanel.add(proximityBtn);
         buttonPanel.add(zoneBtn);
         buttonPanel.add(balanceBtn);
+        buttonPanel.add(editBtn);
         buttonPanel.add(deleteBtn);
         add(buttonPanel, BorderLayout.SOUTH);
 
@@ -198,7 +213,6 @@ public class ConstraintPanel extends JPanel {
             new String[]{"Gender", "Skill Level", "Custom Tag"});
         JTextField tagField = new JTextField(15);
         tagField.setEnabled(false);
-        JCheckBox hardCheck = new JCheckBox("Required (hard constraint)", false);
 
         attrBox.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent e) {
@@ -206,10 +220,12 @@ public class ConstraintPanel extends JPanel {
             }
         });
 
-        JPanel panel = new JPanel(new GridLayout(3, 2, 5, 5));
+        // Balance rules are ALWAYS soft constraints — no "Required" option here.
+        // (A hard balance rule would be near-impossible for the solver to satisfy
+        // in most classrooms, so the option is deliberately removed.)
+        JPanel panel = new JPanel(new GridLayout(2, 2, 5, 5));
         panel.add(new JLabel("Balance by:")); panel.add(attrBox);
         panel.add(new JLabel("Tag name:")); panel.add(tagField);
-        panel.add(new JLabel("")); panel.add(hardCheck);
 
         int result = JOptionPane.showConfirmDialog(this, panel, "Add Balance Rule",
             JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
@@ -229,7 +245,7 @@ public class ConstraintPanel extends JPanel {
                     }
                     break;
             }
-            Constraint c = new BalanceConstraint(attr, tagName, hardCheck.isSelected(), 1.0);
+            Constraint c = new BalanceConstraint(attr, tagName, false, 1.0);
             constraintSet.add(c);
             refreshList();
         }
@@ -242,6 +258,139 @@ public class ConstraintPanel extends JPanel {
             return;
         }
         constraintSet.getAll().remove(idx);
+        refreshList();
+    }
+
+    /**
+     * Opens an edit dialog for the currently selected rule, pre-filled
+     * with the rule's existing values. On OK, replaces the rule at the
+     * same list index so order is preserved.
+     */
+    private void editRule() {
+        int idx = constraintList.getSelectedIndex();
+        if (idx < 0) {
+            JOptionPane.showMessageDialog(this, "Select a rule first, then click Edit.");
+            return;
+        }
+        Constraint c = constraintSet.getAll().get(idx);
+        if (c instanceof ProximityConstraint) editProximity((ProximityConstraint) c, idx);
+        else if (c instanceof ZoneConstraint) editZone((ZoneConstraint) c, idx);
+        else if (c instanceof BalanceConstraint) editBalance((BalanceConstraint) c, idx);
+    }
+
+    private void editProximity(ProximityConstraint old, int idx) {
+        if (students.size() < 2) {
+            JOptionPane.showMessageDialog(this, "Need at least 2 students.");
+            return;
+        }
+        Student[] studentArr = students.toArray(new Student[0]);
+        JComboBox<Student> studentABox = new JComboBox<Student>(studentArr);
+        JComboBox<Student> studentBBox = new JComboBox<Student>(studentArr);
+        studentABox.setSelectedItem(old.getStudentA());
+        studentBBox.setSelectedItem(old.getStudentB());
+        JComboBox<String> modeBox = new JComboBox<String>(
+            new String[]{"Must sit APART", "Should sit TOGETHER"});
+        modeBox.setSelectedIndex(ProximityConstraint.APART.equals(old.getMode()) ? 0 : 1);
+        JCheckBox hardCheck = new JCheckBox("Required (hard constraint)", old.isHard());
+
+        JPanel panel = new JPanel(new GridLayout(4, 2, 5, 5));
+        panel.add(new JLabel("Student A:")); panel.add(studentABox);
+        panel.add(new JLabel("Student B:")); panel.add(studentBBox);
+        panel.add(new JLabel("Rule:")); panel.add(modeBox);
+        panel.add(new JLabel("")); panel.add(hardCheck);
+
+        int result = JOptionPane.showConfirmDialog(this, panel, "Edit Proximity Rule",
+            JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+        if (result != JOptionPane.OK_OPTION) return;
+
+        Student a = (Student) studentABox.getSelectedItem();
+        Student b = (Student) studentBBox.getSelectedItem();
+        if (a == b) {
+            JOptionPane.showMessageDialog(this, "Select two different students.");
+            return;
+        }
+        String mode = modeBox.getSelectedIndex() == 0
+            ? ProximityConstraint.APART : ProximityConstraint.TOGETHER;
+        Constraint updated = new ProximityConstraint(a, b, mode, hardCheck.isSelected(), old.getWeight());
+        constraintSet.getAll().set(idx, updated);
+        refreshList();
+    }
+
+    private void editZone(ZoneConstraint old, int idx) {
+        if (students.isEmpty() || zones.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "Need students and zones.");
+            return;
+        }
+        Student[] studentArr = students.toArray(new Student[0]);
+        Zone[] zoneArr = zones.toArray(new Zone[0]);
+        JComboBox<Student> studentBox = new JComboBox<Student>(studentArr);
+        JComboBox<Zone> zoneBox = new JComboBox<Zone>(zoneArr);
+        studentBox.setSelectedItem(old.getStudent());
+        zoneBox.setSelectedItem(old.getZone());
+        JComboBox<String> modeBox = new JComboBox<String>(
+            new String[]{"Must be IN zone", "Must NOT be in zone"});
+        modeBox.setSelectedIndex(ZoneConstraint.MUST_BE_IN.equals(old.getMode()) ? 0 : 1);
+        JCheckBox hardCheck = new JCheckBox("Required (hard constraint)", old.isHard());
+
+        JPanel panel = new JPanel(new GridLayout(4, 2, 5, 5));
+        panel.add(new JLabel("Student:")); panel.add(studentBox);
+        panel.add(new JLabel("Zone:")); panel.add(zoneBox);
+        panel.add(new JLabel("Rule:")); panel.add(modeBox);
+        panel.add(new JLabel("")); panel.add(hardCheck);
+
+        int result = JOptionPane.showConfirmDialog(this, panel, "Edit Zone Rule",
+            JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+        if (result != JOptionPane.OK_OPTION) return;
+
+        Student s = (Student) studentBox.getSelectedItem();
+        Zone z = (Zone) zoneBox.getSelectedItem();
+        String mode = modeBox.getSelectedIndex() == 0
+            ? ZoneConstraint.MUST_BE_IN : ZoneConstraint.MUST_NOT_BE_IN;
+        Constraint updated = new ZoneConstraint(s, z, mode, hardCheck.isSelected(), old.getWeight());
+        constraintSet.getAll().set(idx, updated);
+        refreshList();
+    }
+
+    private void editBalance(BalanceConstraint old, int idx) {
+        JComboBox<String> attrBox = new JComboBox<String>(
+            new String[]{"Gender", "Skill Level", "Custom Tag"});
+        // Preselect based on old attribute
+        if (BalanceConstraint.GENDER.equals(old.getAttribute())) attrBox.setSelectedIndex(0);
+        else if (BalanceConstraint.SKILL.equals(old.getAttribute())) attrBox.setSelectedIndex(1);
+        else attrBox.setSelectedIndex(2);
+        final JTextField tagField = new JTextField(old.getTagName() == null ? "" : old.getTagName(), 15);
+        tagField.setEnabled(attrBox.getSelectedIndex() == 2);
+        attrBox.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+                tagField.setEnabled(attrBox.getSelectedIndex() == 2);
+            }
+        });
+
+        // No "Required" checkbox — balance rules are always soft (matches add dialog)
+        JPanel panel = new JPanel(new GridLayout(2, 2, 5, 5));
+        panel.add(new JLabel("Balance by:")); panel.add(attrBox);
+        panel.add(new JLabel("Tag name:")); panel.add(tagField);
+
+        int result = JOptionPane.showConfirmDialog(this, panel, "Edit Balance Rule",
+            JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+        if (result != JOptionPane.OK_OPTION) return;
+
+        String attr;
+        String tagName = null;
+        switch (attrBox.getSelectedIndex()) {
+            case 0: attr = BalanceConstraint.GENDER; break;
+            case 1: attr = BalanceConstraint.SKILL; break;
+            default:
+                attr = BalanceConstraint.TAG;
+                tagName = tagField.getText().trim();
+                if (tagName.isEmpty()) {
+                    JOptionPane.showMessageDialog(this, "Enter a tag name.");
+                    return;
+                }
+                break;
+        }
+        Constraint updated = new BalanceConstraint(attr, tagName, false, old.getWeight());
+        constraintSet.getAll().set(idx, updated);
         refreshList();
     }
 

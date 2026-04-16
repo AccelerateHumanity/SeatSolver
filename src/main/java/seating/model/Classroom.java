@@ -80,8 +80,8 @@ public class Classroom {
             if (d == exclude) continue;
             if (desk.collidesWith(d, gridSize)) return true;
         }
-        // Also check desk vs landmarks (rotation-aware bounds)
-        java.awt.geom.Rectangle2D deskBounds = desk.getBounds(gridSize);
+        // Also check desk vs landmarks (both sides rotation-aware)
+        java.awt.geom.Rectangle2D deskBounds = desk.getRotatedBounds(gridSize);
         for (Landmark lm : landmarks) {
             if (deskBounds.intersects(lm.getRotatedBounds(gridSize))) return true;
         }
@@ -93,9 +93,9 @@ public class Classroom {
      */
     public boolean hasLandmarkCollision(Landmark landmark, Landmark exclude) {
         java.awt.geom.Rectangle2D lmBounds = landmark.getRotatedBounds(gridSize);
-        // Check vs desks
+        // Check vs desks (rotation-aware)
         for (Desk d : desks) {
-            if (lmBounds.intersects(d.getBounds(gridSize))) return true;
+            if (lmBounds.intersects(d.getRotatedBounds(gridSize))) return true;
         }
         // Check vs other landmarks (rotation-aware)
         for (Landmark lm : landmarks) {
@@ -173,6 +173,9 @@ public class Classroom {
         this.gridRows = Math.max(5, rows);
         this.adjacencyThreshold = gridSize * 3;
 
+        double scaleX = (double) gridColumns / oldCols;
+        double scaleY = (double) gridRows / oldRows;
+
         // Re-sync desk gridSize
         for (Desk d : desks) {
             d.setGridSize(gridSize);
@@ -180,11 +183,10 @@ public class Classroom {
 
         // Scale zones proportionally
         for (Zone z : zones) {
-            int newGx = (int) Math.round((double) z.getGridX() * gridColumns / oldCols);
-            int newGy = (int) Math.round((double) z.getGridY() * gridRows / oldRows);
-            int newGw = Math.max(1, (int) Math.round((double) z.getGridWidth() * gridColumns / oldCols));
-            int newGh = Math.max(1, (int) Math.round((double) z.getGridHeight() * gridRows / oldRows));
-            // Clamp to new bounds
+            int newGx = (int) Math.round(z.getGridX() * scaleX);
+            int newGy = (int) Math.round(z.getGridY() * scaleY);
+            int newGw = Math.max(1, (int) Math.round(z.getGridWidth() * scaleX));
+            int newGh = Math.max(1, (int) Math.round(z.getGridHeight() * scaleY));
             newGx = Math.min(newGx, gridColumns - 1);
             newGy = Math.min(newGy, gridRows - 1);
             newGw = Math.min(newGw, gridColumns - newGx);
@@ -192,7 +194,28 @@ public class Classroom {
             z.setBounds(newGx, newGy, newGw, newGh);
         }
 
-        // Remove desks that no longer fit
+        // Scale desk positions proportionally (keeps their layout in the
+        // same relative area as the room shrinks/grows).
+        for (Desk d : desks) {
+            int newGx = (int) Math.round(d.getGridX() * scaleX);
+            int newGy = (int) Math.round(d.getGridY() * scaleY);
+            // Keep desk inside grid; getRotatedBounds accounts for rotation
+            newGx = Math.max(0, Math.min(newGx, gridColumns - d.getWidthInCells()));
+            newGy = Math.max(0, Math.min(newGy, gridRows - d.getHeightInCells()));
+            d.setPosition(newGx, newGy);
+        }
+
+        // Scale landmark positions proportionally
+        for (Landmark lm : landmarks) {
+            int newGx = (int) Math.round(lm.getGridX() * scaleX);
+            int newGy = (int) Math.round(lm.getGridY() * scaleY);
+            newGx = Math.max(0, Math.min(newGx, gridColumns - lm.getGridW()));
+            newGy = Math.max(0, Math.min(newGy, gridRows - lm.getGridH()));
+            lm.setPosition(newGx, newGy);
+        }
+
+        // Remove desks that STILL don't fit after scaling (e.g. desk bigger
+        // than new grid). Fallback for edge cases.
         java.util.Iterator<Desk> it = desks.iterator();
         while (it.hasNext()) {
             Desk d = it.next();

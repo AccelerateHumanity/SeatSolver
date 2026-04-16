@@ -112,7 +112,12 @@ public class ArrangementPanel extends JPanel {
         tip.setForeground(new Color(140, 140, 145));
         tip.setAlignmentX(Component.CENTER_ALIGNMENT);
         listPanel.add(tip);
+        // Force both panels to repaint immediately, not just when the tab
+        // becomes visible again.
         listPanel.revalidate();
+        listPanel.repaint();
+        detailPanel.revalidate();
+        detailPanel.repaint();
     }
 
     /**
@@ -276,4 +281,9 @@ public class ArrangementPanel extends JPanel {
         buildArrangementList();
         refreshSelection();
     }
+
+    /** Exposes the current result/constraintSet/graph refs for undo capture. */
+    public SolverResult getResult() { return result; }
+    public ConstraintSet getCurrentConstraintSet() { return constraintSet; }
+    public SeatGraph getGraph() { return graph; }
 }
