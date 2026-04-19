@@ -18,6 +18,10 @@ public class ProximityConstraint implements Constraint {
     public static final String APART = "apart";
     /** Mode indicating students should be kept together. */
     public static final String TOGETHER = "together";
+    /** Pixel distance beyond which closeness saturates to 0.0. Calibrated to
+     *  roughly the diagonal of a default classroom so "far apart" across the
+     *  whole room scores the extreme. */
+    public static final double MAX_PROXIMITY_DISTANCE = 400.0;
 
     private Student studentA;
     private Student studentB;
@@ -43,21 +47,32 @@ public class ProximityConstraint implements Constraint {
         this.weight = weight;
     }
 
+    /**
+     * Scores how well this proximity rule is satisfied by the current seating.
+     * <p>
+     * Both modes use a shared "closeness" gradient derived from the pixel
+     * distance between the two students' seats. Closeness ranges from 1.0
+     * (seats touching / same desk) down to 0.0 at {@link #MAX_PROXIMITY_DISTANCE}
+     * and further. Graph-adjacent seats (same desk) pin closeness to 1.0
+     * regardless of computed pixel distance, so "same desk" always scores
+     * the extreme on both sides.
+     * <p>
+     * Return values:
+     * <ul>
+     *   <li>{@link #TOGETHER}: score = closeness (high when close)
+     *   <li>{@link #APART}: score = 1 - closeness (high when far apart)
+     * </ul>
+     * Returns 1.0 when either student is unassigned (no penalty for work-in-progress).
+     */
     public double evaluate(SeatingArrangement arrangement, SeatGraph graph) {
         Seat seatA = arrangement.getSeatOf(studentA);
         Seat seatB = arrangement.getSeatOf(studentB);
         if (seatA == null || seatB == null) return 1.0; // not assigned yet
 
-        // Distance-based for BOTH modes. Same-desk (graph-adjacent) pins
-        // closeness to 1.0 so APART gives the hardest possible penalty (0.0)
-        // and TOGETHER the maximum reward (1.0). Beyond same-desk, score
-        // decays linearly with pixel distance — two students in different
-        // desks but physically close still rank accordingly under both modes.
         java.awt.geom.Point2D posA = seatA.getGlobalPosition();
         java.awt.geom.Point2D posB = seatB.getGlobalPosition();
         double dist = posA.distance(posB);
-        double maxDist = 400.0;
-        double closeness = Math.max(0.0, Math.min(1.0, 1.0 - dist / maxDist));
+        double closeness = Math.max(0.0, Math.min(1.0, 1.0 - dist / MAX_PROXIMITY_DISTANCE));
         if (graph.areAdjacent(seatA, seatB)) closeness = 1.0;
 
         if (APART.equals(mode)) {

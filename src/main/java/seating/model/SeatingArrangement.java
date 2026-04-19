@@ -11,11 +11,16 @@ import java.util.Map;
 public class SeatingArrangement {
 
     private HashMap<Seat, Student> assignment;
+    // Reverse index: student -> seat. Kept in sync with `assignment` so
+    // getSeatOf is O(1) instead of O(n). Critical for solver inner loops
+    // and live-score recalculation after every interaction.
+    private HashMap<Student, Seat> reverseAssignment;
     private double score;
 
     /** Creates an empty arrangement. */
     public SeatingArrangement() {
         this.assignment = new HashMap<Seat, Student>();
+        this.reverseAssignment = new HashMap<Student, Seat>();
         this.score = 0.0;
     }
 
@@ -27,6 +32,10 @@ public class SeatingArrangement {
      */
     public SeatingArrangement(HashMap<Seat, Student> assignment, double score) {
         this.assignment = new HashMap<Seat, Student>(assignment);
+        this.reverseAssignment = new HashMap<Student, Seat>();
+        for (Map.Entry<Seat, Student> e : assignment.entrySet()) {
+            reverseAssignment.put(e.getValue(), e.getKey());
+        }
         this.score = score;
     }
 
@@ -37,7 +46,18 @@ public class SeatingArrangement {
      * @param student the student to assign
      */
     public void assign(Seat seat, Student student) {
+        // If this student was sitting elsewhere, remove that mapping first.
+        Seat previous = reverseAssignment.get(student);
+        if (previous != null) {
+            assignment.remove(previous);
+        }
+        // If the seat was occupied by someone else, evict them from the reverse map.
+        Student displaced = assignment.get(seat);
+        if (displaced != null) {
+            reverseAssignment.remove(displaced);
+        }
         assignment.put(seat, student);
+        reverseAssignment.put(student, seat);
     }
 
     /**
@@ -46,7 +66,8 @@ public class SeatingArrangement {
      * @param seat the seat to clear
      */
     public void unassign(Seat seat) {
-        assignment.remove(seat);
+        Student s = assignment.remove(seat);
+        if (s != null) reverseAssignment.remove(s);
     }
 
     /**
@@ -60,18 +81,13 @@ public class SeatingArrangement {
     }
 
     /**
-     * Returns the seat assigned to a student, or null.
+     * Returns the seat assigned to a student, or null. O(1) via reverse index.
      *
      * @param student the student to look up
      * @return the seat, or null if unassigned
      */
     public Seat getSeatOf(Student student) {
-        for (Map.Entry<Seat, Student> entry : assignment.entrySet()) {
-            if (entry.getValue().equals(student)) {
-                return entry.getKey();
-            }
-        }
-        return null;
+        return reverseAssignment.get(student);
     }
 
     /** Returns a copy of the full assignment map. */

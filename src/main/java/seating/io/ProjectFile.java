@@ -125,9 +125,9 @@ public class ProjectFile {
 
         sb.append("}\n");
 
-        BufferedWriter writer = new BufferedWriter(new FileWriter(file));
-        writer.write(sb.toString());
-        writer.close();
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(file))) {
+            writer.write(sb.toString());
+        }
     }
 
     /**
@@ -139,13 +139,13 @@ public class ProjectFile {
      * @throws IOException if reading/parsing fails
      */
     public static LoadResult load(File file) throws IOException {
-        BufferedReader reader = new BufferedReader(new FileReader(file));
         StringBuilder sb = new StringBuilder();
-        String line;
-        while ((line = reader.readLine()) != null) {
-            sb.append(line).append("\n");
+        try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                sb.append(line).append("\n");
+            }
         }
-        reader.close();
 
         String json = sb.toString();
         LoadResult result = new LoadResult();

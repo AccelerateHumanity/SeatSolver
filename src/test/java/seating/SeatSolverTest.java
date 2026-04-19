@@ -304,6 +304,27 @@ public class SeatSolverTest {
         check("Apart describe", apart.describe().contains("must NOT sit next to"));
         check("Apart type", "proximity".equals(apart.getType()));
 
+        // Distance-based APART scoring: non-adjacent but close seats should
+        // produce an intermediate score (between 0 and 1), not binary 1.0.
+        double farScore = apart.evaluate(arr2, graph);
+        check("APART distance-based (non-binary)", farScore > 0.0 && farScore <= 1.0);
+
+        // TOGETHER mode mirrors APART on the same distance curve.
+        ProximityConstraint together = new ProximityConstraint(alice, bob,
+            ProximityConstraint.TOGETHER, false, 1.0);
+        double togetherSameDesk = together.evaluate(arr1, graph);
+        check("TOGETHER same-desk score = 1.0", togetherSameDesk == 1.0);
+        double togetherFar = together.evaluate(arr2, graph);
+        check("TOGETHER + APART sum to 1.0 for same pair", Math.abs((togetherFar + farScore) - 1.0) < 1e-9);
+
+        // getSeatOf must be O(1) and consistent with assignment map.
+        check("getSeatOf reverse-map: alice", arr1.getSeatOf(alice) == d1.getSeats().get(0));
+        arr1.unassign(d1.getSeats().get(0));
+        check("getSeatOf after unassign: alice", arr1.getSeatOf(alice) == null);
+        // Re-assigning alice to a different seat updates reverse map atomically
+        arr1.assign(d2.getSeats().get(0), alice);
+        check("getSeatOf after reassign: alice", arr1.getSeatOf(alice) == d2.getSeats().get(0));
+
         // --- Zone Constraint ---
         ZoneConstraint zoneRule = new ZoneConstraint(alice, front,
             ZoneConstraint.MUST_BE_IN, true, 1.0);

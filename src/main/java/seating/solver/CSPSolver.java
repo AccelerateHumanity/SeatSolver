@@ -22,6 +22,9 @@ import java.util.*;
  */
 public class CSPSolver {
 
+    /** Arrangements more similar than this are discarded as near-duplicates. */
+    private static final double DIVERSITY_THRESHOLD = 0.80;
+
     private ConstraintSet constraintSet;
     private SeatGraph graph;
     private int maxSolutions;
@@ -102,7 +105,7 @@ public class CSPSolver {
         for (SeatingArrangement arr : optimized) {
             boolean tooSimilar = false;
             for (SeatingArrangement kept : diverse) {
-                if (similarity(arr, kept) > 0.80) { tooSimilar = true; break; }
+                if (similarity(arr, kept) > DIVERSITY_THRESHOLD) { tooSimilar = true; break; }
             }
             if (!tooSimilar) diverse.add(arr);
             if (diverse.size() >= returnCount) break;
@@ -242,8 +245,20 @@ public class CSPSolver {
     }
 
     /**
-     * Orders seats by how well they satisfy soft constraints for this student.
-     * Evaluates a partial arrangement with each candidate seat and scores it.
+     * Orders candidate seats for {@code student} by a quick per-seat score,
+     * best first. The score averages per-constraint mini-scores that mirror
+     * the full scoring model so backtracking tries seats that look promising
+     * under the same lens as the final {@code ConstraintSet.evaluate}.
+     * <p>
+     * Constraints considered:
+     * <ul>
+     *   <li>{@link seating.constraint.ProximityConstraint}: distance-based
+     *       closeness (same formula as {@code ProximityConstraint.evaluate}).
+     *       TOGETHER rewards closeness; APART rewards distance.
+     *   <li>{@link seating.constraint.ZoneConstraint}: 1.0 if the seat is in
+     *       the target zone for MUST_BE_IN (or outside for MUST_NOT_BE_IN), else 0.0.
+     * </ul>
+     * Seats where no constraint applies get a neutral 0.5.
      */
     private void orderByScore(List<Seat> seats, final Student student,
                                final HashMap<Seat, Student> currentAssignment) {
@@ -272,11 +287,20 @@ public class CSPSolver {
                     }
 
                     if (otherSeat != null) {
-                        boolean adj = graph.areAdjacent(seat, otherSeat);
+                        // Distance-based scoring aligned with ProximityConstraint.evaluate():
+                        // closeness 1.0 when seats touch, 0.0 at MAX_PROXIMITY_DISTANCE. Same
+                        // closeness pinning to 1.0 for graph-adjacent pairs so the heuristic
+                        // ranks "same desk" as the extreme on both sides.
+                        java.awt.geom.Point2D pa = seat.getGlobalPosition();
+                        java.awt.geom.Point2D pb = otherSeat.getGlobalPosition();
+                        double dist = pa.distance(pb);
+                        double closeness = Math.max(0.0, Math.min(1.0,
+                            1.0 - dist / seating.constraint.ProximityConstraint.MAX_PROXIMITY_DISTANCE));
+                        if (graph.areAdjacent(seat, otherSeat)) closeness = 1.0;
                         if ("apart".equals(pc.getMode())) {
-                            score += adj ? 0.0 : 1.0;
+                            score += 1.0 - closeness;
                         } else {
-                            score += adj ? 1.0 : 0.3;
+                            score += closeness;
                         }
                         checks++;
                     }
@@ -317,7 +341,9 @@ public class CSPSolver {
      */
     private SeatingArrangement localSearchOptimize(SeatingArrangement arr,
                                                      List<Seat> allSeats) {
-        HashMap<Seat, Student> best = arr.getAssignmentMap();
+        // Defensive copy — getAssignmentMap() returns the live reference,
+        // so mutating it below would corrupt the input arrangement.
+        HashMap<Seat, Student> best = new HashMap<Seat, Student>(arr.getAssignmentMap());
         double bestScore = arr.getScore();
 
         // Get list of occupied seats

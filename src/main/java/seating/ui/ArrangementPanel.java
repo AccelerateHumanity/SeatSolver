@@ -264,9 +264,14 @@ public class ArrangementPanel extends JPanel {
         detailPanel.repaint();
     }
 
+    /** Scores at or above this render green (excellent). */
+    private static final double SCORE_HIGH = 0.8;
+    /** Scores at or above this render orange (ok); below renders red. */
+    private static final double SCORE_MID = 0.5;
+
     private Color scoreColor(double score) {
-        if (score >= 0.8) return new Color(46, 125, 50);
-        if (score >= 0.5) return new Color(230, 126, 34);
+        if (score >= SCORE_HIGH) return new Color(46, 125, 50);
+        if (score >= SCORE_MID) return new Color(230, 126, 34);
         return new Color(192, 57, 43);
     }
 

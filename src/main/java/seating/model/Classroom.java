@@ -9,6 +9,15 @@ import java.util.List;
  */
 public class Classroom {
 
+    /** Default grid width in cells for a new classroom. */
+    public static final int DEFAULT_COLS = 28;
+    /** Default grid height in cells for a new classroom. */
+    public static final int DEFAULT_ROWS = 20;
+    /** Default pixel size of each grid cell. */
+    public static final int DEFAULT_GRID_SIZE = 20;
+    /** Seats within this many grid cells count as "adjacent" for constraints. */
+    public static final int ADJACENCY_MULTIPLIER = 3;
+
     private int gridColumns;
     private int gridRows;
     private int gridSize;       // pixels per cell
@@ -28,15 +37,15 @@ public class Classroom {
         this.gridColumns = gridColumns;
         this.gridRows = gridRows;
         this.gridSize = gridSize;
-        this.adjacencyThreshold = gridSize * 3; // seats within 3 cells are adjacent
+        this.adjacencyThreshold = gridSize * ADJACENCY_MULTIPLIER;
         this.desks = new ArrayList<Desk>();
         this.zones = new ArrayList<Zone>();
         this.landmarks = new ArrayList<Landmark>();
     }
 
-    /** Creates a default 28x20 classroom with 20px grid cells. Double resolution for fine positioning. */
+    /** Creates a default classroom (28x20 grid, 20px cells). */
     public Classroom() {
-        this(28, 20, 20); // typical classroom size
+        this(DEFAULT_COLS, DEFAULT_ROWS, DEFAULT_GRID_SIZE);
     }
 
     // ---- Desk management ----

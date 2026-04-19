@@ -327,6 +327,8 @@ public class ClassroomPanel extends JPanel {
                 rotationBatchStartLmPos.clear();
                 if (rotationBatchTimer != null) rotationBatchTimer.stop();
                 rotationBatchTotal = 0;
+                if (animTimer != null) animTimer.stop();
+                animatingDesk = null;
                 setCursor(Cursor.getDefaultCursor());
                 repaint();
             }
@@ -338,6 +340,10 @@ public class ClassroomPanel extends JPanel {
             public void actionPerformed(ActionEvent e) {
                 if (undoManager.undo()) {
                     selectedDesk = null;
+                    selectedLandmark = null;
+                    selectedDesks.clear();
+                    selectedLandmarks.clear();
+                    refreshLiveScore();
                     repaint();
                 }
             }
@@ -348,6 +354,11 @@ public class ClassroomPanel extends JPanel {
         am.put("redo", new AbstractAction() {
             public void actionPerformed(ActionEvent e) {
                 if (undoManager.redo()) {
+                    selectedDesk = null;
+                    selectedLandmark = null;
+                    selectedDesks.clear();
+                    selectedLandmarks.clear();
+                    refreshLiveScore();
                     repaint();
                 }
             }
@@ -806,6 +817,14 @@ public class ClassroomPanel extends JPanel {
         if (discoMode) return;
         // Drop a dragged student onto a target seat (swap or move)
         if (draggedStudent != null) {
+            // Arrangement might have been invalidated mid-drag (Clear All, delete desk, etc.)
+            if (currentArrangement == null) {
+                draggedStudent = null;
+                draggedStudentSourceSeat = null;
+                setCursor(Cursor.getDefaultCursor());
+                repaint();
+                return;
+            }
             Seat target = getAnySeatAt(toModelX(e.getX()), toModelY(e.getY()));
             if (target != null && target != draggedStudentSourceSeat) {
                 Student targetStudent = currentArrangement.getStudentAt(target);
@@ -938,17 +957,19 @@ public class ClassroomPanel extends JPanel {
     /** Commits the pending multi-duplicate batch as a single compound command. */
     private void commitPendingDuplicates() {
         if (pendingDuplicates == null || pendingDuplicates.isEmpty()) return;
-        int cols = classroom.getGridColumns();
-        int rows = classroom.getGridRows();
         java.util.List<Command> batch = new java.util.ArrayList<Command>();
         int skipped = 0;
         for (Desk copy : pendingDuplicates) {
-            int gx = copy.getGridX();
-            int gy = copy.getGridY();
-            int dw = copy.getWidthInCells();
-            int dh = copy.getHeightInCells();
-            if (gx < 0 || gy < 0 || gx + dw > cols || gy + dh > rows ||
-                classroom.hasCollision(copy, null)) {
+            // Rotation-aware bounds check: clampToClassroom accounts for the
+            // rotated footprint, so ghosts rotated before commit get the right
+            // check (plain gx+dw>cols would ignore rotation).
+            int[] clamped = gridManager.clampToClassroom(copy, copy.getGridX(), copy.getGridY());
+            if (clamped[0] != copy.getGridX() || clamped[1] != copy.getGridY()) {
+                // Would need to shift — treat as "no room" so placement stays truthful.
+                skipped++;
+                continue;
+            }
+            if (classroom.hasCollision(copy, null)) {
                 skipped++;
                 continue;
             }
@@ -1658,12 +1679,32 @@ public class ClassroomPanel extends JPanel {
         }
     }
 
+    /** True iff the snapshot keys still match the live selection. */
+    private boolean rotationBatchSelectionStillValid() {
+        java.util.Set<Desk> currentDesks = new java.util.HashSet<Desk>(selectedDesks);
+        if (selectedDesk != null) currentDesks.add(selectedDesk);
+        java.util.Set<Landmark> currentLms = new java.util.HashSet<Landmark>(selectedLandmarks);
+        if (selectedLandmark != null) currentLms.add(selectedLandmark);
+        return currentDesks.equals(rotationBatchStartDeskPos.keySet())
+            && currentLms.equals(rotationBatchStartLmPos.keySet());
+    }
+
     /**
      * Commits the current rotation batch: snaps items into bounds, checks
      * collision, and either pushes an undo entry or reverts both the rotation
      * and any position shift back to the pre-batch state.
      */
     private void commitRotationBatch() {
+        // Guard: if the user changed selection since the batch started, the
+        // snapshot refers to items the user is no longer interacting with.
+        // Discard silently — those items were already rotated live during
+        // scroll, and we don't want to push an undo entry they didn't expect.
+        if (!rotationBatchSelectionStillValid()) {
+            rotationBatchStartDeskPos.clear();
+            rotationBatchStartLmPos.clear();
+            rotationBatchTotal = 0;
+            return;
+        }
         double total = rotationBatchTotal;
         rotationBatchTotal = 0;
         if (total == 0) {
@@ -1767,6 +1808,13 @@ public class ClassroomPanel extends JPanel {
         pendingDupOffsetsGy = null;
         multiDragStartPos.clear();
         multiDragLmStartPos.clear();
+        // Stop any active timers so they don't fire against a cleared selection.
+        if (rotationBatchTimer != null) rotationBatchTimer.stop();
+        rotationBatchTotal = 0;
+        rotationBatchStartDeskPos.clear();
+        rotationBatchStartLmPos.clear();
+        if (animTimer != null) animTimer.stop();
+        animatingDesk = null;
         setCursor(Cursor.getDefaultCursor());
     }
     public Classroom getClassroom() { return classroom; }
@@ -2319,8 +2367,10 @@ public class ClassroomPanel extends JPanel {
             Student student = currentArrangement.getStudentAt(seat);
             if (student == null) continue;
 
-            java.awt.geom.Point2D pos = seat.getGlobalPosition();
             Desk desk = seat.getParentDesk();
+            if (desk == null) continue; // desk removed but arrangement still holds stale seats
+
+            java.awt.geom.Point2D pos = seat.getGlobalPosition();
 
             // During disco, transform seat position to match desk's disco position + rotation
             if (discoMode && discoPx != null && desk != null) {
