@@ -449,56 +449,22 @@ public class MainFrame extends JFrame {
         }
     }
 
+    /**
+     * Applies a loaded project snapshot to this MainFrame. Public so
+     * utilities (e.g. headless screenshot generators) can reuse the same
+     * wiring that the File → Load menu uses.
+     */
+    public void loadProjectState(ProjectFile.LoadResult loaded) {
+        applyLoadedState(loaded);
+    }
+
     private void loadProject() {
         JFileChooser chooser = new JFileChooser();
         chooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("JSON Files", "json"));
         if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
             try {
                 ProjectFile.LoadResult loaded = ProjectFile.load(chooser.getSelectedFile());
-
-                // Replace current state
-                this.classroom = loaded.classroom;
-                this.constraintSet = loaded.constraints;
-
-                // Rebuild student list
-                studentPanel.getStudents().clear();
-                studentPanel.getStudents().addAll(loaded.students);
-                studentPanel.setConstraintSet(constraintSet);
-
-                // Rebuild ALL UI components with new classroom
-                undoManager.clear();
-                classroomPanel = new ClassroomPanel(classroom, undoManager);
-                deskPalette = new DeskPalette(classroomPanel);
-                constraintPanel = new ConstraintPanel(constraintSet,
-                    studentPanel.getStudents(), classroom.getZones());
-                constraintPanel.setStudentPanel(studentPanel);
-                studentPanel.setConstraintPanel(constraintPanel);
-                classroomPanel.setConstraintPanel(constraintPanel);
-                studentPanel.setDeleteListener(new StudentPanel.StudentDeleteListener() {
-                    public void onStudentDeleted(Student s) {
-                        constraintPanel.removeConstraintsFor(s);
-                    }
-                });
-                arrangementPanel = new ArrangementPanel(classroomPanel);
-                classroomPanel.setArrangementChangeListener(new ClassroomPanel.ArrangementChangeListener() {
-                    public void onArrangementChanged(seating.model.SeatingArrangement arr) {
-                        arrangementPanel.rescoreAll(
-                        classroomPanel.getConstraintSet(),
-                        classroomPanel.getSeatGraph());
-                    }
-                });
-
-                // Refresh the entire UI
-                getContentPane().removeAll();
-                buildUI();
-                revalidate();
-                repaint();
-                studentPanel.refresh();
-
-                // Recapture initial snapshot so "Reset to Initial Layout" uses the
-                // loaded project as the new baseline, not the previous session's state.
-                initialSnapshot = seating.layout.ResetCommand.Snapshot.capture(classroom);
-
+                applyLoadedState(loaded);
                 String loadMsg = "Project loaded successfully.";
                 if (loaded.loadWarning != null) {
                     loadMsg += "\n\nWarning: " + loaded.loadWarning;
@@ -509,6 +475,51 @@ public class MainFrame extends JFrame {
                     "Load Error", JOptionPane.ERROR_MESSAGE);
             }
         }
+    }
+
+    private void applyLoadedState(ProjectFile.LoadResult loaded) {
+        // Replace current state
+        this.classroom = loaded.classroom;
+        this.constraintSet = loaded.constraints;
+
+        // Rebuild student list
+        studentPanel.getStudents().clear();
+        studentPanel.getStudents().addAll(loaded.students);
+        studentPanel.setConstraintSet(constraintSet);
+
+        // Rebuild ALL UI components with new classroom
+        undoManager.clear();
+        classroomPanel = new ClassroomPanel(classroom, undoManager);
+        deskPalette = new DeskPalette(classroomPanel);
+        constraintPanel = new ConstraintPanel(constraintSet,
+            studentPanel.getStudents(), classroom.getZones());
+        constraintPanel.setStudentPanel(studentPanel);
+        studentPanel.setConstraintPanel(constraintPanel);
+        classroomPanel.setConstraintPanel(constraintPanel);
+        studentPanel.setDeleteListener(new StudentPanel.StudentDeleteListener() {
+            public void onStudentDeleted(Student s) {
+                constraintPanel.removeConstraintsFor(s);
+            }
+        });
+        arrangementPanel = new ArrangementPanel(classroomPanel);
+        classroomPanel.setArrangementChangeListener(new ClassroomPanel.ArrangementChangeListener() {
+            public void onArrangementChanged(seating.model.SeatingArrangement arr) {
+                arrangementPanel.rescoreAll(
+                    classroomPanel.getConstraintSet(),
+                    classroomPanel.getSeatGraph());
+            }
+        });
+
+        // Refresh the entire UI
+        getContentPane().removeAll();
+        buildUI();
+        revalidate();
+        repaint();
+        studentPanel.refresh();
+
+        // Recapture initial snapshot so "Reset to Initial Layout" uses the
+        // loaded project as the new baseline, not the previous session's state.
+        initialSnapshot = seating.layout.ResetCommand.Snapshot.capture(classroom);
     }
 
     private void generateSeating() {
