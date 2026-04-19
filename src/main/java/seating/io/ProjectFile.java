@@ -67,6 +67,9 @@ public class ProjectFile {
             sb.append("\"w\":").append(z.getGridWidth()).append(",");
             sb.append("\"h\":").append(z.getGridHeight()).append(",");
             sb.append("\"color\":\"").append(colorToHex(z.getColor())).append("\"");
+            if (z.getRotation() != 0) {
+                sb.append(",\"rotation\":").append(z.getRotation());
+            }
             sb.append("}");
             if (i < zones.size() - 1) sb.append(",");
             sb.append("\n");
@@ -186,8 +189,11 @@ public class ProjectFile {
                 int w = parseIntField(zoneJson, "w", 5);
                 int h = parseIntField(zoneJson, "h", 3);
                 Color color = hexToColor(parseStringField(zoneJson, "color"));
+                double rotation = parseDoubleField(zoneJson, "rotation", 0.0);
                 if (label != null) {
-                    result.classroom.addZone(new Zone(label, x, y, w, h, color));
+                    Zone z = new Zone(label, x, y, w, h, color);
+                    z.setRotation(rotation);
+                    result.classroom.addZone(z);
                 }
             }
         }
@@ -238,13 +244,22 @@ public class ProjectFile {
 
         // Parse constraints
         result.constraints = new ConstraintSet();
+        int droppedConstraints = 0;
         String constraintsArr = extractArray(json, "constraints");
         if (constraintsArr != null) {
             for (String cJson : splitJsonArray(constraintsArr)) {
                 Constraint c = deserializeConstraint(cJson, result.students,
                     result.classroom.getZones());
-                if (c != null) result.constraints.add(c);
+                if (c != null) {
+                    result.constraints.add(c);
+                } else {
+                    droppedConstraints++;
+                }
             }
+        }
+        if (droppedConstraints > 0) {
+            result.loadWarning = droppedConstraints + " constraint(s) dropped "
+                + "(referenced student or zone no longer exists).";
         }
 
         return result;
@@ -428,6 +443,7 @@ public class ProjectFile {
     }
 
     private static String colorToHex(Color c) {
+        if (c == null) return "#cccccc";
         return String.format("#%02x%02x%02x", c.getRed(), c.getGreen(), c.getBlue());
     }
 
@@ -450,5 +466,6 @@ public class ProjectFile {
         public Classroom classroom;
         public List<Student> students;
         public ConstraintSet constraints;
+        public String loadWarning; // non-null if constraints were dropped during load
     }
 }

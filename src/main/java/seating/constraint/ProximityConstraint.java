@@ -48,29 +48,34 @@ public class ProximityConstraint implements Constraint {
         Seat seatB = arrangement.getSeatOf(studentB);
         if (seatA == null || seatB == null) return 1.0; // not assigned yet
 
-        boolean adjacent = graph.areAdjacent(seatA, seatB);
+        // Distance-based for BOTH modes. Same-desk (graph-adjacent) pins
+        // closeness to 1.0 so APART gives the hardest possible penalty (0.0)
+        // and TOGETHER the maximum reward (1.0). Beyond same-desk, score
+        // decays linearly with pixel distance — two students in different
+        // desks but physically close still rank accordingly under both modes.
+        java.awt.geom.Point2D posA = seatA.getGlobalPosition();
+        java.awt.geom.Point2D posB = seatB.getGlobalPosition();
+        double dist = posA.distance(posB);
+        double maxDist = 400.0;
+        double closeness = Math.max(0.0, Math.min(1.0, 1.0 - dist / maxDist));
+        if (graph.areAdjacent(seatA, seatB)) closeness = 1.0;
 
         if (APART.equals(mode)) {
-            return adjacent ? 0.0 : 1.0;
-        } else { // TOGETHER
-            if (adjacent) return 1.0;
-            // Distance-based gradient: closer seats score higher
-            java.awt.geom.Point2D posA = seatA.getGlobalPosition();
-            java.awt.geom.Point2D posB = seatB.getGlobalPosition();
-            double dist = posA.distance(posB);
-            // Score drops linearly from 0.9 (very close) to 0.1 (far apart)
-            double maxDist = 400.0;
-            double score = Math.max(0.1, 0.9 * (1.0 - dist / maxDist));
-            return score;
+            return 1.0 - closeness; // high when far apart
         }
+        return closeness; // TOGETHER: high when close
     }
 
     public boolean isSatisfied(SeatingArrangement arrangement, SeatGraph graph) {
-        if (APART.equals(mode)) {
-            return evaluate(arrangement, graph) >= 1.0;
-        }
-        // "Together" is satisfied if adjacent OR very close
-        return evaluate(arrangement, graph) >= 0.7;
+        // Satisfaction is still based on graph adjacency (same-desk / very
+        // close) so hard constraints keep their original semantics — the
+        // solver and UI "✓/✗" match. The continuous distance score from
+        // evaluate() is for display weighting only.
+        Seat seatA = arrangement.getSeatOf(studentA);
+        Seat seatB = arrangement.getSeatOf(studentB);
+        if (seatA == null || seatB == null) return true;
+        boolean adjacent = graph.areAdjacent(seatA, seatB);
+        return APART.equals(mode) ? !adjacent : adjacent;
     }
 
     public boolean isHard() { return hard; }

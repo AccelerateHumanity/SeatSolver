@@ -59,10 +59,19 @@ public class ClassroomPanel extends JPanel {
 
     // Manual student seat drag (post-generation)
     private Student draggedStudent;
-    // Zone drag-to-move state
-    private Zone draggedZone;
-    private int zoneDragOffsetX, zoneDragOffsetY; // click offset in grid cells
-    private int zoneDragStartGx, zoneDragStartGy; // start position for undo
+    // (Zone drag-to-move removed — zones are immutable after creation)
+
+    // Rotation batching: accumulates scroll-wheel rotation ticks into a single
+    // undo entry. A 500ms timer fires after the last tick to commit the batch.
+    private javax.swing.Timer rotationBatchTimer;
+    private double rotationBatchTotal; // accumulated degrees this batch
+    // Pre-rotation positions captured at batch start so revert can restore
+    // the exact grid position (snapDeskIntoBounds only clamps, it can't undo
+    // a bump).
+    private java.util.HashMap<Desk, int[]> rotationBatchStartDeskPos =
+        new java.util.HashMap<Desk, int[]>();
+    private java.util.HashMap<Landmark, int[]> rotationBatchStartLmPos =
+        new java.util.HashMap<Landmark, int[]>();
     // Multi-duplicate ghost batch: copies follow cursor as a group
     private java.util.List<Desk> pendingDuplicates;
     private int[] pendingDupOffsetsGx, pendingDupOffsetsGy; // offset from cursor per copy
@@ -143,6 +152,13 @@ public class ClassroomPanel extends JPanel {
 
             public void mouseReleased(MouseEvent e) {
                 handleMouseRelease(e);
+                // If the user was scroll-rotating while holding the mouse,
+                // fire the batch commit immediately now that they've let go.
+                if (rotationBatchTimer != null && rotationBatchTimer.isRunning()
+                        && rotationBatchTotal != 0) {
+                    rotationBatchTimer.stop();
+                    commitRotationBatch();
+                }
             }
 
             public void mouseDragged(MouseEvent e) {
@@ -218,54 +234,30 @@ public class ClassroomPanel extends JPanel {
                     return;
                 }
 
+                // Multi-duplicate ghosts: rotate all copies together. No snap
+                // or collision check — ghosts aren't committed yet.
+                if (pendingDuplicates != null && !pendingDuplicates.isEmpty()) {
+                    for (Desk d : pendingDuplicates) d.rotate(amount);
+                    repaint();
+                    return;
+                }
+
                 if (!selectedDesks.isEmpty() || !selectedLandmarks.isEmpty()) {
-                    // Rotate entire multi-selection as a SINGLE compound command
-                    // so one undo click reverts all of them together.
-                    java.util.List<Command> batch = new java.util.ArrayList<Command>();
-                    for (Desk d : selectedDesks) {
-                        Command rc = new RotateDeskCommand(d, amount);
-                        rc.execute();
-                        snapDeskIntoBounds(d);
-                        if (classroom.hasCollision(d, d)) {
-                            rc.undo();  // collision — revert
-                            continue;
-                        }
-                        batch.add(rc);
-                    }
-                    for (Landmark lm : selectedLandmarks) {
-                        Command rc = new RotateLandmarkCommand(lm, amount);
-                        rc.execute();
-                        snapLandmarkIntoBounds(lm);
-                        if (classroom.hasLandmarkCollision(lm, lm)) {
-                            rc.undo();
-                            continue;
-                        }
-                        batch.add(rc);
-                    }
-                    if (!batch.isEmpty()) {
-                        undoManager.pushExecuted(new seating.layout.CompoundCommand(
-                            batch, "Rotate " + batch.size() + " items"));
-                    }
+                    // Apply rotation directly — NO snap and NO collision
+                    // blocking during scroll. Items may clip out of bounds or
+                    // overlap mid-rotation; the 500ms batch timer snaps and
+                    // collision-checks on commit, reverting if either fails.
+                    for (Desk d : selectedDesks) d.rotate(amount);
+                    for (Landmark lm : selectedLandmarks) lm.rotate(amount);
+                    accumulateRotationUndo(amount);
                     repaint();
                 } else if (selectedDesk != null) {
-                    Command rc = new RotateDeskCommand(selectedDesk, amount);
-                    rc.execute();
-                    snapDeskIntoBounds(selectedDesk);
-                    if (classroom.hasCollision(selectedDesk, selectedDesk)) {
-                        rc.undo();  // revert into collision
-                    } else {
-                        undoManager.pushExecuted(rc);
-                    }
+                    selectedDesk.rotate(amount);
+                    accumulateRotationUndo(amount);
                     repaint();
                 } else if (selectedLandmark != null) {
-                    Command rc = new RotateLandmarkCommand(selectedLandmark, amount);
-                    rc.execute();
-                    snapLandmarkIntoBounds(selectedLandmark);
-                    if (classroom.hasLandmarkCollision(selectedLandmark, selectedLandmark)) {
-                        rc.undo();
-                    } else {
-                        undoManager.pushExecuted(rc);
-                    }
+                    selectedLandmark.rotate(amount);
+                    accumulateRotationUndo(amount);
                     repaint();
                 }
             }
@@ -322,7 +314,6 @@ public class ClassroomPanel extends JPanel {
                 pendingDuplicates = null;
                 pendingDupOffsetsGx = null;
                 pendingDupOffsetsGy = null;
-                draggedZone = null;
                 selectedDesk = null;
                 selectedLandmark = null;
                 selectedDesks.clear();
@@ -332,6 +323,10 @@ public class ClassroomPanel extends JPanel {
                 isMultiDragging = false;
                 zoneDrawMode = false;
                 zoneDragging = false;
+                rotationBatchStartDeskPos.clear();
+                rotationBatchStartLmPos.clear();
+                if (rotationBatchTimer != null) rotationBatchTimer.stop();
+                rotationBatchTotal = 0;
                 setCursor(Cursor.getDefaultCursor());
                 repaint();
             }
@@ -570,6 +565,14 @@ public class ClassroomPanel extends JPanel {
                     lms.get(i).setRotation(savedLmRotation[i]);
                 }
             }
+            // Null all disco arrays to prevent stale references if classroom
+            // changes between toggles (desks added/removed)
+            savedGridX = null; savedGridY = null; savedRotation = null;
+            discoPx = null; discoPy = null; discoDx = null; discoDy = null;
+            discoRotAngle = null; discoRotSpeed = null;
+            savedLmGridX = null; savedLmGridY = null; savedLmRotation = null;
+            discoLmPx = null; discoLmPy = null; discoLmDx = null; discoLmDy = null;
+            discoLmRotAngle = null; discoLmRotSpeed = null;
             repaint();
         }
     }
@@ -588,6 +591,8 @@ public class ClassroomPanel extends JPanel {
         if (ghostDesk != null || ghostLandmark != null || pendingDuplicates != null) return;
         requestFocusInWindow();
 
+        // Ensure seat global positions are up-to-date before hit-testing
+        if (currentArrangement != null) refreshSeatPositions();
         // Student drag (post-generation): if a seat is occupied and clicked,
         // pick up the student so the user can drag them to a new seat.
         if (currentArrangement != null && SwingUtilities.isLeftMouseButton(e)) {
@@ -669,39 +674,18 @@ public class ClassroomPanel extends JPanel {
                 lmDragOffsetX = toModelX(e.getX()) - lmHit.getGridX() * gs;
                 lmDragOffsetY = toModelY(e.getY()) - lmHit.getGridY() * gs;
             } else {
-                // Empty of desks/landmarks — check for zone drag-to-move first.
-                int gs = classroom.getGridSize();
+                // Empty space — start rectangle selection
+                selectedDesk = null;
+                selectedLandmark = null;
+                selectedDesks.clear();
+                selectedLandmarks.clear();
                 int mx = toModelX(e.getX());
                 int my = toModelY(e.getY());
-                Zone hitZone = null;
-                // Topmost zone at click (last added = drawn on top)
-                java.util.List<Zone> zs = classroom.getZones();
-                for (int i = zs.size() - 1; i >= 0; i--) {
-                    Zone z = zs.get(i);
-                    if (z.getBounds(gs).contains(mx, my)) { hitZone = z; break; }
-                }
-                if (hitZone != null) {
-                    draggedZone = hitZone;
-                    zoneDragOffsetX = mx / gs - hitZone.getGridX();
-                    zoneDragOffsetY = my / gs - hitZone.getGridY();
-                    zoneDragStartGx = hitZone.getGridX();
-                    zoneDragStartGy = hitZone.getGridY();
-                    selectedDesk = null;
-                    selectedLandmark = null;
-                    selectedDesks.clear();
-                    selectedLandmarks.clear();
-                } else {
-                    // True empty space — start rectangle selection
-                    selectedDesk = null;
-                    selectedLandmark = null;
-                    selectedDesks.clear();
-                    selectedLandmarks.clear();
-                    isRectSelecting = true;
-                    rectSelStartX = mx;
-                    rectSelStartY = my;
-                    rectSelEndX = mx;
-                    rectSelEndY = my;
-                }
+                isRectSelecting = true;
+                rectSelStartX = mx;
+                rectSelStartY = my;
+                rectSelEndX = mx;
+                rectSelEndY = my;
             }
             repaint();
         }
@@ -716,24 +700,7 @@ public class ClassroomPanel extends JPanel {
             repaint();
             return;
         }
-        // Move a zone that's being dragged — clamped inside the grid
-        if (draggedZone != null) {
-            int gs = classroom.getGridSize();
-            int mx = toModelX(e.getX()) / gs;
-            int my = toModelY(e.getY()) / gs;
-            int newGx = mx - zoneDragOffsetX;
-            int newGy = my - zoneDragOffsetY;
-            int cols = classroom.getGridColumns();
-            int rows = classroom.getGridRows();
-            newGx = Math.max(0, Math.min(newGx, cols - draggedZone.getGridWidth()));
-            newGy = Math.max(0, Math.min(newGy, rows - draggedZone.getGridHeight()));
-            if (newGx != draggedZone.getGridX() || newGy != draggedZone.getGridY()) {
-                draggedZone.setBounds(newGx, newGy,
-                    draggedZone.getGridWidth(), draggedZone.getGridHeight());
-                repaint();
-            }
-            return;
-        }
+        // (Zone drag removed — zones are immutable after creation)
         if (isMultiDragging && (!selectedDesks.isEmpty() || !selectedLandmarks.isEmpty())) {
             int gs = classroom.getGridSize();
             int dx = toModelX(e.getX()) - multiDragLastX;
@@ -837,26 +804,9 @@ public class ClassroomPanel extends JPanel {
 
     private void handleMouseRelease(MouseEvent e) {
         if (discoMode) return;
-        // Drop a dragged zone — if it actually moved, commit an EditZoneCommand
-        if (draggedZone != null) {
-            int newGx = draggedZone.getGridX();
-            int newGy = draggedZone.getGridY();
-            if (newGx != zoneDragStartGx || newGy != zoneDragStartGy) {
-                // Revert to start so the EditZoneCommand's execute() re-applies the move
-                draggedZone.setBounds(zoneDragStartGx, zoneDragStartGy,
-                    draggedZone.getGridWidth(), draggedZone.getGridHeight());
-                undoManager.execute(new seating.layout.EditZoneCommand(draggedZone,
-                    draggedZone.getLabel(), newGx, newGy,
-                    draggedZone.getGridWidth(), draggedZone.getGridHeight(),
-                    draggedZone.getColor()));
-            }
-            draggedZone = null;
-            repaint();
-            return;
-        }
         // Drop a dragged student onto a target seat (swap or move)
         if (draggedStudent != null) {
-            Seat target = getSeatAt(toModelX(e.getX()), toModelY(e.getY()));
+            Seat target = getAnySeatAt(toModelX(e.getX()), toModelY(e.getY()));
             if (target != null && target != draggedStudentSourceSeat) {
                 Student targetStudent = currentArrangement.getStudentAt(target);
                 currentArrangement.unassign(draggedStudentSourceSeat);
@@ -924,6 +874,7 @@ public class ClassroomPanel extends JPanel {
                 selectedLandmark.setPosition(lmDragStartGx, lmDragStartGy);
                 undoManager.execute(new MoveLandmarkCommand(selectedLandmark,
                     lmDragStartGx, lmDragStartGy, newGx, newGy));
+                refreshLiveScore();
             }
             repaint();
             return;
@@ -961,6 +912,8 @@ public class ClassroomPanel extends JPanel {
                 selectedDesk.setPosition(dragStartGx, dragStartGy);
                 undoManager.execute(new MoveDeskCommand(selectedDesk,
                     dragStartGx, dragStartGy, newGx, newGy));
+                // Live-refresh arrangement score after desk moved
+                refreshLiveScore();
             }
             repaint();
         }
@@ -1037,6 +990,8 @@ public class ClassroomPanel extends JPanel {
 
     private void showContextMenu(MouseEvent e) {
         if (discoMode) return;
+        // Don't show context menu while placing a ghost or pending duplicates
+        if (ghostDesk != null || ghostLandmark != null || pendingDuplicates != null) return;
         int gs = classroom.getGridSize();
 
         // Student seat right-click → quick rule menu (takes priority over everything)
@@ -1052,7 +1007,22 @@ public class ClassroomPanel extends JPanel {
         }
 
         // Multi-select context menu (desks + landmarks)
+        // If exactly 1 desk is selected (and 0 landmarks), treat as a single-desk
+        // right-click so the user gets the full context menu (with Duplicate... dialog)
+        // instead of the multi-select menu showing "Duplicate (1)".
         int totalSelected = selectedDesks.size() + selectedLandmarks.size();
+        if (totalSelected == 1 && selectedDesks.size() == 1 && selectedLandmarks.isEmpty()) {
+            selectedDesk = selectedDesks.get(0);
+            selectedDesks.clear();
+            repaint();
+            // Fall through to single-desk context menu below
+        } else if (totalSelected == 1 && selectedLandmarks.size() == 1 && selectedDesks.isEmpty()) {
+            Landmark lm = selectedLandmarks.get(0);
+            selectedLandmarks.clear();
+            showLandmarkContextMenu(e, lm);
+            return;
+        }
+        totalSelected = selectedDesks.size() + selectedLandmarks.size();
         if (totalSelected > 0) {
             JPopupMenu menu = new JPopupMenu();
             JMenuItem rotateAll = new JMenuItem("Rotate Selected 90\u00B0");
@@ -1134,7 +1104,7 @@ public class ClassroomPanel extends JPanel {
         if (classroom.getDeskAt(toModelX(e.getX()), toModelY(e.getY())) == null) {
             java.util.List<Zone> zonesAtPoint = new java.util.ArrayList<Zone>();
             for (Zone zone : classroom.getZones()) {
-                if (zone.getBounds(gs).contains(toModelX(e.getX()), toModelY(e.getY()))) {
+                if (zone.contains(toModelX(e.getX()), toModelY(e.getY()), gs)) {
                     zonesAtPoint.add(zone);
                 }
             }
@@ -1147,7 +1117,7 @@ public class ClassroomPanel extends JPanel {
                 JPopupMenu picker = new JPopupMenu();
                 JMenuItem header = new JMenuItem("Edit which zone?");
                 header.setEnabled(false);
-                header.setFont(UIScale.font("SansSerif", Font.BOLD, 12));
+                header.setFont(new Font("SansSerif", Font.BOLD, 12));
                 picker.add(header);
                 picker.addSeparator();
                 for (final Zone z : zonesAtPoint) {
@@ -1208,41 +1178,31 @@ public class ClassroomPanel extends JPanel {
                 try { count = Math.max(1, Math.min(50, Integer.parseInt(input.trim()))); }
                 catch (NumberFormatException ex) { return; }
 
-                int placed = 0;
-                int skipped = 0;
-                int startX = selectedDesk.getGridX();
-                int startY = selectedDesk.getGridY();
+                // Build N ghost copies that follow the cursor as a group.
+                // Click commits; Esc cancels. Scroll wheel rotates all ghosts.
                 int dw = selectedDesk.getWidthInCells();
                 int dh = selectedDesk.getHeightInCells();
                 int cols = classroom.getGridColumns();
-                int rows = classroom.getGridRows();
-
+                int perRow = Math.max(1, cols / Math.max(1, dw));
+                java.util.ArrayList<Desk> copies = new java.util.ArrayList<Desk>();
+                int[] offX = new int[count];
+                int[] offY = new int[count];
                 for (int i = 0; i < count; i++) {
-                    // Try placing to the right, then wrap to next row
-                    int gx = startX + (placed + 1) * dw;
-                    int gy = startY;
-                    // Wrap if off-screen
-                    if (gx + dw > cols) {
-                        int perRow = Math.max(1, (cols - startX) / dw);
-                        int row = (placed + 1) / perRow;
-                        int col = (placed + 1) % perRow;
-                        gx = startX + col * dw;
-                        gy = startY + row * dh;
-                    }
-                    // Strict bounds check AFTER wrap — wrap can still overflow vertically
-                    if (gx + dw > cols || gy + dh > rows) { skipped++; continue; }
-                    Desk copy = DeskPalette.createDesk(selectedDesk.getTypeName(), gx, gy);
-                    if (copy == null) { skipped++; continue; }
+                    int row = i / perRow;
+                    int col = i % perRow;
+                    Desk copy = DeskPalette.createDesk(selectedDesk.getTypeName(), 0, 0);
+                    if (copy == null) continue;
                     copy.setRotation(selectedDesk.getRotation());
-                    if (classroom.hasCollision(copy, null)) { skipped++; continue; }
-                    undoManager.execute(new AddDeskCommand(classroom, copy));
-                    placed++;
+                    int idx = copies.size();
+                    copies.add(copy);
+                    offX[idx] = col * dw;
+                    offY[idx] = row * dh;
                 }
-                if (skipped > 0) {
-                    JOptionPane.showMessageDialog(ClassroomPanel.this,
-                        "Placed " + placed + " copy/copies. " + skipped + " skipped (no room).",
-                        "Duplicate", JOptionPane.INFORMATION_MESSAGE);
-                }
+                if (copies.isEmpty()) return;
+                pendingDuplicates = copies;
+                pendingDupOffsetsGx = java.util.Arrays.copyOf(offX, copies.size());
+                pendingDupOffsetsGy = java.util.Arrays.copyOf(offY, copies.size());
+                setCursor(Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR));
                 repaint();
             }
         });
@@ -1305,7 +1265,7 @@ public class ClassroomPanel extends JPanel {
     private void showZoneContextMenu(MouseEvent e, final Zone zone) {
         JPopupMenu menu = new JPopupMenu();
 
-        JMenuItem editItem = new JMenuItem("Edit Zone: " + zone.getLabel());
+        JMenuItem editItem = new JMenuItem("Rename Zone: " + zone.getLabel());
         editItem.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent ae) {
                 JTextField labelField = new JTextField(zone.getLabel(), 15);
@@ -1313,7 +1273,7 @@ public class ClassroomPanel extends JPanel {
                 panel.add(new JLabel("Label:"));
                 panel.add(labelField);
                 int result = JOptionPane.showConfirmDialog(ClassroomPanel.this, panel,
-                    "Edit Zone", JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+                    "Rename Zone", JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
                 if (result == JOptionPane.OK_OPTION && !labelField.getText().trim().isEmpty()) {
                     undoManager.execute(new seating.layout.EditZoneCommand(zone,
                         labelField.getText().trim(),
@@ -1329,60 +1289,13 @@ public class ClassroomPanel extends JPanel {
         deleteItem.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent ae) {
                 undoManager.execute(new seating.layout.DeleteZoneCommand(classroom, zone));
+                if (constraintPanel != null) constraintPanel.removeConstraintsForZone(zone);
+                invalidateArrangement();
                 repaint();
             }
         });
 
-        JMenuItem resizeItem = new JMenuItem("Move / Resize Zone...");
-        resizeItem.addActionListener(new ActionListener() {
-            public void actionPerformed(ActionEvent ae) {
-                int maxCols = classroom.getGridColumns();
-                int maxRows = classroom.getGridRows();
-                JSpinner xSpin = new JSpinner(new SpinnerNumberModel(zone.getGridX(), 0, maxCols - 1, 1));
-                JSpinner ySpin = new JSpinner(new SpinnerNumberModel(zone.getGridY(), 0, maxRows - 1, 1));
-                JSpinner wSpin = new JSpinner(new SpinnerNumberModel(zone.getGridWidth(), 1, maxCols, 1));
-                JSpinner hSpin = new JSpinner(new SpinnerNumberModel(zone.getGridHeight(), 1, maxRows, 1));
-
-                xSpin.setToolTipText("Left edge column (0 = far left of classroom)");
-                ySpin.setToolTipText("Top edge row (0 = front of classroom)");
-                wSpin.setToolTipText("Number of grid columns the zone spans");
-                hSpin.setToolTipText("Number of grid rows the zone spans");
-
-                // Header line showing current zone coverage
-                JLabel info = new JLabel("<html><i>Current: col "
-                    + zone.getGridX() + "\u2013" + (zone.getGridX() + zone.getGridWidth() - 1)
-                    + ", row " + zone.getGridY() + "\u2013" + (zone.getGridY() + zone.getGridHeight() - 1)
-                    + " &nbsp;&nbsp; Room: " + maxCols + "\u00D7" + maxRows + "</i></html>");
-                info.setBorder(BorderFactory.createEmptyBorder(0, 0, 6, 0));
-
-                JPanel grid = new JPanel(new java.awt.GridLayout(4, 2, 5, 5));
-                grid.add(new JLabel("Left column (X):")); grid.add(xSpin);
-                grid.add(new JLabel("Top row (Y):")); grid.add(ySpin);
-                grid.add(new JLabel("Width (cols):")); grid.add(wSpin);
-                grid.add(new JLabel("Height (rows):")); grid.add(hSpin);
-
-                JPanel panel = new JPanel(new java.awt.BorderLayout());
-                panel.add(info, java.awt.BorderLayout.NORTH);
-                panel.add(grid, java.awt.BorderLayout.CENTER);
-
-                int result = JOptionPane.showConfirmDialog(ClassroomPanel.this, panel,
-                    "Move / Resize Zone: " + zone.getLabel(),
-                    JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
-                if (result == JOptionPane.OK_OPTION) {
-                    int nx = Math.max(0, Math.min((Integer) xSpin.getValue(), maxCols - 1));
-                    int ny = Math.max(0, Math.min((Integer) ySpin.getValue(), maxRows - 1));
-                    // Clamp width/height so zone stays entirely inside grid
-                    int nw = Math.max(1, Math.min((Integer) wSpin.getValue(), maxCols - nx));
-                    int nh = Math.max(1, Math.min((Integer) hSpin.getValue(), maxRows - ny));
-                    undoManager.execute(new seating.layout.EditZoneCommand(zone,
-                        zone.getLabel(), nx, ny, nw, nh, zone.getColor()));
-                    repaint();
-                }
-            }
-        });
-
         menu.add(editItem);
-        menu.add(resizeItem);
         menu.addSeparator();
         menu.add(deleteItem);
         menu.show(this, e.getX(), e.getY());
@@ -1399,7 +1312,7 @@ public class ClassroomPanel extends JPanel {
         // Header (disabled)
         JMenuItem header = new JMenuItem("Student: " + student.getName());
         header.setEnabled(false);
-        header.setFont(UIScale.font("SansSerif", Font.BOLD, 12));
+        header.setFont(new Font("SansSerif", Font.BOLD, 12));
         menu.add(header);
         menu.addSeparator();
 
@@ -1658,6 +1571,155 @@ public class ClassroomPanel extends JPanel {
     public SeatGraph getSeatGraph() { return seatGraph; }
 
     /** Clamps a desk's position so its (possibly rotated) footprint stays in the grid. */
+    /**
+     * Live-refreshes the arrangement score after a desk/zone mutation. Forces a
+     * draw pass so seat positions update, then re-evaluates constraints and
+     * notifies the Results tab listener.
+     */
+    // Cached scratch image for seat position computation — avoids 12MB+
+    // garbage per click from creating a new BufferedImage every time.
+    private java.awt.image.BufferedImage scratchImage;
+    private java.awt.Graphics2D scratchGraphics;
+
+    /**
+     * Forces all desks to compute their seat global positions by running
+     * a scratch draw pass. Reuses a cached image to avoid GC pressure.
+     */
+    private void refreshSeatPositions() {
+        int w = Math.max(1, classroom.getPixelWidth());
+        int h = Math.max(1, classroom.getPixelHeight());
+        // Recreate only if dimensions changed
+        if (scratchImage == null || scratchImage.getWidth() != w || scratchImage.getHeight() != h) {
+            if (scratchGraphics != null) scratchGraphics.dispose();
+            scratchImage = new java.awt.image.BufferedImage(w, h,
+                java.awt.image.BufferedImage.TYPE_INT_ARGB);
+            scratchGraphics = scratchImage.createGraphics();
+        }
+        int gs = classroom.getGridSize();
+        for (Desk d : classroom.getDesks()) d.draw(scratchGraphics, gs);
+    }
+
+    private void refreshLiveScore() {
+        if (currentArrangement == null || constraintSet == null || seatGraph == null) return;
+        refreshSeatPositions();
+        currentArrangement.setScore(constraintSet.evaluate(currentArrangement, seatGraph));
+        if (arrangementChangeListener != null) {
+            arrangementChangeListener.onArrangementChanged(currentArrangement);
+        }
+    }
+
+    /**
+     * Accumulates scroll-wheel rotation into a batched undo entry. On the
+     * first tick, starts a 500ms timer. Each tick adds to the accumulated
+     * total. When the timer fires, pushes ONE compound undo entry covering
+     * the full rotation, so one Ctrl+Z reverts the entire scroll session.
+     */
+    private void accumulateRotationUndo(final double amount) {
+        boolean starting = (rotationBatchTimer == null || !rotationBatchTimer.isRunning());
+        if (starting) {
+            // Snapshot pre-rotation grid positions so the revert path can
+            // restore them exactly (snap-only revert loses bumped positions).
+            rotationBatchStartDeskPos.clear();
+            rotationBatchStartLmPos.clear();
+            for (Desk d : selectedDesks) {
+                rotationBatchStartDeskPos.put(d, new int[]{d.getGridX(), d.getGridY()});
+            }
+            if (selectedDesk != null && !rotationBatchStartDeskPos.containsKey(selectedDesk)) {
+                rotationBatchStartDeskPos.put(selectedDesk,
+                    new int[]{selectedDesk.getGridX(), selectedDesk.getGridY()});
+            }
+            for (Landmark lm : selectedLandmarks) {
+                rotationBatchStartLmPos.put(lm, new int[]{lm.getGridX(), lm.getGridY()});
+            }
+            if (selectedLandmark != null && !rotationBatchStartLmPos.containsKey(selectedLandmark)) {
+                rotationBatchStartLmPos.put(selectedLandmark,
+                    new int[]{selectedLandmark.getGridX(), selectedLandmark.getGridY()});
+            }
+        }
+        rotationBatchTotal += amount;
+        if (!starting) {
+            rotationBatchTimer.restart();
+        } else {
+            rotationBatchTimer = new javax.swing.Timer(500, new java.awt.event.ActionListener() {
+                public void actionPerformed(java.awt.event.ActionEvent evt) {
+                    // If the user is still holding the mouse, defer commit.
+                    // They get to finish positioning/rotating before we
+                    // collision-check or push an undo entry.
+                    if (isDragging || isDraggingLandmark || isMultiDragging) {
+                        rotationBatchTimer.restart();
+                        return;
+                    }
+                    rotationBatchTimer.stop();
+                    commitRotationBatch();
+                }
+            });
+            rotationBatchTimer.setRepeats(false);
+            rotationBatchTimer.start();
+        }
+    }
+
+    /**
+     * Commits the current rotation batch: snaps items into bounds, checks
+     * collision, and either pushes an undo entry or reverts both the rotation
+     * and any position shift back to the pre-batch state.
+     */
+    private void commitRotationBatch() {
+        double total = rotationBatchTotal;
+        rotationBatchTotal = 0;
+        if (total == 0) {
+            rotationBatchStartDeskPos.clear();
+            rotationBatchStartLmPos.clear();
+            return;
+        }
+
+        // Snap everything into bounds, then collision-check.
+        for (Desk d : rotationBatchStartDeskPos.keySet()) snapDeskIntoBounds(d);
+        for (Landmark lm : rotationBatchStartLmPos.keySet()) snapLandmarkIntoBounds(lm);
+
+        boolean collision = false;
+        for (Desk d : rotationBatchStartDeskPos.keySet()) {
+            if (classroom.hasCollision(d, d)) { collision = true; break; }
+        }
+        if (!collision) {
+            for (Landmark lm : rotationBatchStartLmPos.keySet()) {
+                if (classroom.hasLandmarkCollision(lm, lm)) { collision = true; break; }
+            }
+        }
+
+        if (collision) {
+            // Full revert: undo rotation AND restore the original grid
+            // position (the snap may have bumped items into neighbors).
+            for (java.util.Map.Entry<Desk, int[]> e : rotationBatchStartDeskPos.entrySet()) {
+                Desk d = e.getKey();
+                d.rotate(-total);
+                d.setPosition(e.getValue()[0], e.getValue()[1]);
+            }
+            for (java.util.Map.Entry<Landmark, int[]> e : rotationBatchStartLmPos.entrySet()) {
+                Landmark lm = e.getKey();
+                lm.rotate(-total);
+                lm.setPosition(e.getValue()[0], e.getValue()[1]);
+            }
+            rotationBatchStartDeskPos.clear();
+            rotationBatchStartLmPos.clear();
+            refreshLiveScore();
+            repaint();
+            return;
+        }
+
+        // Clean commit: push ONE compound undo entry.
+        java.util.List<Command> batch = new java.util.ArrayList<Command>();
+        for (Desk d : rotationBatchStartDeskPos.keySet()) batch.add(new RotateDeskCommand(d, total));
+        for (Landmark lm : rotationBatchStartLmPos.keySet()) batch.add(new RotateLandmarkCommand(lm, total));
+        if (!batch.isEmpty()) {
+            undoManager.pushExecuted(new seating.layout.CompoundCommand(
+                batch, "Rotate " + (int) total + "\u00B0"));
+        }
+        rotationBatchStartDeskPos.clear();
+        rotationBatchStartLmPos.clear();
+        refreshLiveScore();
+        repaint();
+    }
+
     private void snapDeskIntoBounds(Desk d) {
         int[] p = gridManager.clampToClassroom(d, d.getGridX(), d.getGridY());
         if (p[0] != d.getGridX() || p[1] != d.getGridY()) {
@@ -1696,20 +1758,23 @@ public class ClassroomPanel extends JPanel {
         isDraggingLandmark = false;
         isRectSelecting = false;
         draggedStudent = null;
-        draggedZone = null;
+        draggedStudentSourceSeat = null;
+        zoneDragging = false;
         ghostDesk = null;
         ghostLandmark = null;
         pendingDuplicates = null;
         pendingDupOffsetsGx = null;
         pendingDupOffsetsGy = null;
+        multiDragStartPos.clear();
+        multiDragLmStartPos.clear();
         setCursor(Cursor.getDefaultCursor());
     }
     public Classroom getClassroom() { return classroom; }
     public UndoManager getUndoManager() { return undoManager; }
 
     /** Converts screen pixel coordinates to model coordinates using inverse scale. */
-    private int toModelX(int screenX) { return (int)(screenX / displayScale); }
-    private int toModelY(int screenY) { return (int)(screenY / displayScale); }
+    private int toModelX(int screenX) { return displayScale > 0 ? (int)(screenX / displayScale) : screenX; }
+    private int toModelY(int screenY) { return displayScale > 0 ? (int)(screenY / displayScale) : screenY; }
 
     /**
      * Finds the seat closest to a model-space point, within a threshold.
@@ -1727,10 +1792,29 @@ public class ClassroomPanel extends JPanel {
     private Seat getSeatAt(int modelX, int modelY) {
         if (currentArrangement == null) return null;
         Seat best = null;
-        double bestDist = 12.0; // tight threshold — only true-on-student clicks
+        double bestDist = 16.0; // threshold — matches seat dot visual radius
         for (Desk d : classroom.getDesks()) {
             for (Seat s : d.getSeats()) {
                 if (currentArrangement.getStudentAt(s) == null) continue;
+                java.awt.geom.Point2D p = s.getGlobalPosition();
+                double dx = p.getX() - modelX;
+                double dy = p.getY() - modelY;
+                double dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist < bestDist) {
+                    bestDist = dist;
+                    best = s;
+                }
+            }
+        }
+        return best;
+    }
+
+    /** Same as getSeatAt but accepts empty seats too — for drag drop targets. */
+    private Seat getAnySeatAt(int modelX, int modelY) {
+        Seat best = null;
+        double bestDist = 16.0;
+        for (Desk d : classroom.getDesks()) {
+            for (Seat s : d.getSeats()) {
                 java.awt.geom.Point2D p = s.getGlobalPosition();
                 double dx = p.getX() - modelX;
                 double dy = p.getY() - modelY;
@@ -1838,7 +1922,7 @@ public class ClassroomPanel extends JPanel {
                 10.0f, new float[]{8.0f, 4.0f}, 0.0f));
             g.draw(new Rectangle2D.Double(-2, -2, lmW + 4, lmH + 4));
             if (selectedLandmark.getRotation() != 0) {
-                g.setFont(UIScale.font("SansSerif", Font.PLAIN, 10));
+                g.setFont(new Font("SansSerif", Font.PLAIN, 10));
                 g.setColor(new Color(41, 128, 185));
                 g.drawString((int) selectedLandmark.getRotation() + "\u00B0", 0, -4);
             }
@@ -1889,8 +1973,8 @@ public class ClassroomPanel extends JPanel {
                 g.setStroke(new BasicStroke(1.5f));
                 g.drawOval((int) sp.getX() - 7, (int) sp.getY() - 7, 14, 14);
             }
-            // Highlight the target seat under the cursor
-            Seat targetSeat = getSeatAt(draggedStudentX, draggedStudentY);
+            // Highlight the target seat under the cursor (occupied or empty)
+            Seat targetSeat = getAnySeatAt(draggedStudentX, draggedStudentY);
             if (targetSeat != null && targetSeat != draggedStudentSourceSeat) {
                 java.awt.geom.Point2D tp = targetSeat.getGlobalPosition();
                 g.setColor(new Color(46, 204, 113, 100));
@@ -1905,7 +1989,7 @@ public class ClassroomPanel extends JPanel {
             g.setColor(Color.WHITE);
             g.setStroke(new BasicStroke(2.0f));
             g.drawOval(draggedStudentX - 7, draggedStudentY - 7, 14, 14);
-            g.setFont(UIScale.font("SansSerif", Font.BOLD, 11));
+            g.setFont(new Font("SansSerif", Font.BOLD, 11));
             FontMetrics dfm = g.getFontMetrics();
             String nm = draggedStudent.getName();
             int nw = dfm.stringWidth(nm);
@@ -1929,14 +2013,15 @@ public class ClassroomPanel extends JPanel {
                 pendingZoneColor.getBlue(), 180));
             g.setStroke(new BasicStroke(2.0f));
             g.drawRect(rx, ry, rw, rh);
-            g.setFont(UIScale.font("SansSerif", Font.BOLD, 12));
+            g.setFont(new Font("SansSerif", Font.BOLD, 12));
             g.drawString(pendingZoneLabel, rx + 4, ry + 15);
         }
 
         // Draw empty state hint — auto-wraps to fit narrow rooms
-        if (classroom.getDesks().isEmpty() && ghostDesk == null && !zoneDrawMode) {
+        if (classroom.getDesks().isEmpty() && classroom.getLandmarks().isEmpty()
+                && ghostDesk == null && ghostLandmark == null && !zoneDrawMode) {
             g.setColor(new Color(160, 160, 170));
-            g.setFont(UIScale.font("SansSerif", Font.PLAIN, 16));
+            g.setFont(new Font("SansSerif", Font.PLAIN, 16));
             FontMetrics fmHint = g.getFontMetrics();
             int hintPw = classroom.getPixelWidth();
             int hintPh = classroom.getPixelHeight();
@@ -2036,8 +2121,14 @@ public class ClassroomPanel extends JPanel {
     }
 
     /** Draws the "FRONT OF CLASSROOM" pill label centered at the top of the canvas. */
+    /** Font scale factor so labels shrink proportionally on small rooms. */
+    private double getFontScale() {
+        return Math.min(1.0, classroom.getPixelHeight() / 400.0);
+    }
+
     private void drawFrontLabel(Graphics2D g) {
-        g.setFont(UIScale.font("SansSerif", Font.BOLD, 13));
+        int fontSize = Math.max(7, (int)(13 * getFontScale()));
+        g.setFont(new Font("SansSerif", Font.BOLD, fontSize));
         FontMetrics fmFront = g.getFontMetrics();
         String frontLabel = "FRONT OF CLASSROOM";
         int labelW = fmFront.stringWidth(frontLabel);
@@ -2057,9 +2148,6 @@ public class ClassroomPanel extends JPanel {
         for (int y = 0; y <= classroom.getGridRows(); y++) {
             g.drawLine(0, y * gs, classroom.getPixelWidth(), y * gs);
         }
-
-        // FRONT label — drawn last in drawGrid so it's above grid lines
-        // Will be drawn again on top of everything in paintComponent
     }
 
     private void drawLandmarks(Graphics2D g, int gs) {
@@ -2086,21 +2174,36 @@ public class ClassroomPanel extends JPanel {
 
     private void drawZones(Graphics2D g, int gs) {
         for (Zone zone : classroom.getZones()) {
-            Rectangle2D bounds = zone.getBounds(gs);
             Color c = zone.getColor();
-            g.setColor(new Color(c.getRed(), c.getGreen(), c.getBlue(), 40));
-            g.fill(bounds);
-            g.setColor(new Color(c.getRed(), c.getGreen(), c.getBlue(), 100));
-            g.setStroke(new BasicStroke(1.5f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER,
-                10.0f, new float[]{6.0f, 4.0f}, 0.0f));
-            g.draw(bounds);
-            // Labels drawn separately by drawZoneLabels() so they appear on top
+            AffineTransform saved = g.getTransform();
+            if (zone.getRotation() != 0) {
+                g.transform(zone.getTransform(gs));
+                // Draw at local (0,0) when rotated
+                double w = zone.getGridWidth() * gs;
+                double h = zone.getGridHeight() * gs;
+                g.setColor(new Color(c.getRed(), c.getGreen(), c.getBlue(), 40));
+                g.fill(new Rectangle2D.Double(0, 0, w, h));
+                g.setColor(new Color(c.getRed(), c.getGreen(), c.getBlue(), 100));
+                g.setStroke(new BasicStroke(1.5f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER,
+                    10.0f, new float[]{6.0f, 4.0f}, 0.0f));
+                g.draw(new Rectangle2D.Double(0, 0, w, h));
+            } else {
+                Rectangle2D bounds = zone.getBounds(gs);
+                g.setColor(new Color(c.getRed(), c.getGreen(), c.getBlue(), 40));
+                g.fill(bounds);
+                g.setColor(new Color(c.getRed(), c.getGreen(), c.getBlue(), 100));
+                g.setStroke(new BasicStroke(1.5f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER,
+                    10.0f, new float[]{6.0f, 4.0f}, 0.0f));
+                g.draw(bounds);
+            }
+            g.setTransform(saved);
         }
     }
 
     /** Draws zone labels on top of everything with background pills. Truncates long labels and nudges to avoid overlap. */
     private void drawZoneLabels(Graphics2D g, int gs) {
-        g.setFont(UIScale.font("SansSerif", Font.BOLD, 11));
+        int zoneFontSize = Math.max(6, (int)(11 * getFontScale()));
+        g.setFont(new Font("SansSerif", Font.BOLD, zoneFontSize));
         FontMetrics fm = g.getFontMetrics();
         // Reset shared list so drawStudentNames can read the current frame's rects
         lastZoneLabelRects.clear();
@@ -2255,8 +2358,9 @@ public class ClassroomPanel extends JPanel {
             // Smart name formatting
             String name = smartTruncate(student.getName(), desk);
             int seatCount = (desk != null) ? desk.getSeatCount() : 1;
-            int fontSize = seatCount <= 2 ? 10 : (seatCount <= 4 ? 9 : 8);
-            g.setFont(UIScale.font("SansSerif", Font.BOLD, fontSize));
+            int baseSize = seatCount <= 2 ? 10 : (seatCount <= 4 ? 9 : 8);
+            int fontSize = Math.max(5, (int)(baseSize * getFontScale()));
+            g.setFont(new Font("SansSerif", Font.BOLD, fontSize));
             FontMetrics fm = g.getFontMetrics();
             int tw = fm.stringWidth(name);
             int th = fm.getHeight() + 2;
@@ -2358,7 +2462,7 @@ public class ClassroomPanel extends JPanel {
         g.draw(new Rectangle2D.Double(-2, -2, w + 4, h + 4));
 
         if (selectedDesk.getRotation() != 0) {
-            g.setFont(UIScale.font("SansSerif", Font.PLAIN, 10));
+            g.setFont(new Font("SansSerif", Font.PLAIN, 10));
             g.setColor(new Color(41, 128, 185));
             g.drawString((int) selectedDesk.getRotation() + "\u00B0", 0, -4);
         }

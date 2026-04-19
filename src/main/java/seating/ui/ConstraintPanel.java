@@ -42,17 +42,37 @@ public class ConstraintPanel extends JPanel {
 
         // Header
         JLabel header = new JLabel("Rules: 0");
-        header.setFont(UIScale.font("SansSerif", Font.BOLD, 12));
+        header.setFont(new Font("SansSerif", Font.BOLD, 12));
         add(header, BorderLayout.NORTH);
 
         // Constraint list
         listModel = new DefaultListModel<String>();
         constraintList = new JList<String>(listModel);
         constraintList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-        // Double-click a rule to edit it
+        // Double-click to edit; right-click for context menu
         constraintList.addMouseListener(new MouseAdapter() {
             public void mouseClicked(MouseEvent e) {
                 if (e.getClickCount() == 2) editRule();
+            }
+            public void mousePressed(MouseEvent e) { maybeShowPopup(e); }
+            public void mouseReleased(MouseEvent e) { maybeShowPopup(e); }
+            private void maybeShowPopup(MouseEvent e) {
+                if (!e.isPopupTrigger() && !SwingUtilities.isRightMouseButton(e)) return;
+                int row = constraintList.locationToIndex(e.getPoint());
+                if (row < 0) return;
+                constraintList.setSelectedIndex(row);
+                JPopupMenu popup = new JPopupMenu();
+                JMenuItem editItem = new JMenuItem("Edit Rule");
+                editItem.addActionListener(new ActionListener() {
+                    public void actionPerformed(ActionEvent ae) { editRule(); }
+                });
+                JMenuItem delItem = new JMenuItem("Delete Rule");
+                delItem.addActionListener(new ActionListener() {
+                    public void actionPerformed(ActionEvent ae) { deleteRule(); }
+                });
+                popup.add(editItem);
+                popup.add(delItem);
+                popup.show(constraintList, e.getX(), e.getY());
             }
         });
         add(new JScrollPane(constraintList), BorderLayout.CENTER);
@@ -402,6 +422,22 @@ public class ConstraintPanel extends JPanel {
         java.util.Iterator<Constraint> it = constraintSet.getAll().iterator();
         while (it.hasNext()) {
             if (it.next().involvesStudent(student)) {
+                it.remove();
+            }
+        }
+        refreshList();
+    }
+
+    /**
+     * Removes all ZoneConstraints that reference the given zone.
+     * Called when a zone is deleted to avoid orphaned "phantom" constraints
+     * that reference a zone no longer in the classroom.
+     */
+    public void removeConstraintsForZone(Zone zone) {
+        java.util.Iterator<Constraint> it = constraintSet.getAll().iterator();
+        while (it.hasNext()) {
+            Constraint c = it.next();
+            if (c instanceof ZoneConstraint && ((ZoneConstraint) c).getZone() == zone) {
                 it.remove();
             }
         }

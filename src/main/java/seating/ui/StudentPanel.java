@@ -127,7 +127,7 @@ public class StudentPanel extends JPanel {
 
         // Count label
         JLabel countLabel = new JLabel("Students: 0");
-        countLabel.setFont(UIScale.font("SansSerif", Font.BOLD, 12));
+        countLabel.setFont(new Font("SansSerif", Font.BOLD, 12));
         add(countLabel, BorderLayout.NORTH);
     }
 
@@ -220,6 +220,29 @@ public class StudentPanel extends JPanel {
         JFileChooser chooser = new JFileChooser();
         chooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("CSV Files", "csv"));
         if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
+            // Ask whether to replace or append
+            int mode = JOptionPane.showOptionDialog(this,
+                "Replace existing students or add to them?",
+                "Import CSV", JOptionPane.DEFAULT_OPTION, JOptionPane.QUESTION_MESSAGE,
+                null, new String[]{"Replace", "Append", "Cancel"}, "Replace");
+            if (mode == 2 || mode == JOptionPane.CLOSED_OPTION) return;
+            if (mode == 0) {
+                // When replacing, clean up orphaned constraints that reference
+                // the old students — otherwise they accumulate silently.
+                if (constraintPanel != null) {
+                    for (Student s : new java.util.ArrayList<Student>(students)) {
+                        constraintPanel.removeConstraintsFor(s);
+                    }
+                }
+                // Notify delete listeners for each removed student
+                if (deleteListener != null) {
+                    for (Student s : students) {
+                        deleteListener.onStudentDeleted(s);
+                    }
+                }
+                students.clear();
+            }
+
             int count = 0;
             int skipped = 0;
             try (java.io.BufferedReader reader = new java.io.BufferedReader(
@@ -307,7 +330,7 @@ public class StudentPanel extends JPanel {
 
     /** Table model for the student JTable. */
     private class StudentTableModel extends AbstractTableModel {
-        private String[] columns = {"Name", "G", "Skill", "Tags", "Rules"};
+        private String[] columns = {"Name", "Gender", "Skill", "Tags", "Rules"};
 
         public int getRowCount() { return students.size(); }
         public int getColumnCount() { return columns.length; }

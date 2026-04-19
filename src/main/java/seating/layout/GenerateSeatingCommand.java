@@ -44,6 +44,9 @@ public class GenerateSeatingCommand implements Command {
     }
 
     public void undo() {
+        // Clear the canvas arrangement display — if oldResult is null (no prior
+        // generation), the canvas should show no student assignments.
+        classroomPanel.setCurrentArrangement(null);
         classroomPanel.setConstraintData(oldConstraints, oldGraph);
         arrangementPanel.setResult(oldResult, oldConstraints, oldGraph);
     }

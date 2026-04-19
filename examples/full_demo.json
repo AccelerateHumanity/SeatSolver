@@ -4,19 +4,22 @@
     "rows": 20,
     "gridSize": 20,
     "desks": [
-      {"type":"pair","id":"d1","gridX":4,"gridY":2,"rotation":0.0},
-      {"type":"pair","id":"d2","gridX":10,"gridY":2,"rotation":0.0},
-      {"type":"pair","id":"d3","gridX":16,"gridY":2,"rotation":0.0},
-      {"type":"group","id":"d4","gridX":2,"gridY":8,"rotation":0.0},
-      {"type":"group","id":"d5","gridX":10,"gridY":8,"rotation":0.0},
-      {"type":"circle","id":"d6","gridX":18,"gridY":8,"rotation":0.0},
-      {"type":"lab","id":"d7","gridX":2,"gridY":15,"rotation":0.0},
-      {"type":"lab","id":"d8","gridX":10,"gridY":15,"rotation":0.0}
+      {"type":"pair","id":"d1","gridX":6,"gridY":4,"rotation":0.0},
+      {"type":"pair","id":"d2","gridX":12,"gridY":4,"rotation":0.0},
+      {"type":"pair","id":"d3","gridX":18,"gridY":4,"rotation":0.0},
+      {"type":"group","id":"d4","gridX":4,"gridY":9,"rotation":0.0},
+      {"type":"group","id":"d5","gridX":20,"gridY":9,"rotation":0.0},
+      {"type":"circle","id":"d6","gridX":12,"gridY":9,"rotation":0.0},
+      {"type":"lab","id":"d7","gridX":6,"gridY":16,"rotation":0.0},
+      {"type":"lab","id":"d8","gridX":16,"gridY":16,"rotation":0.0}
     ],
     "zones": [
-      {"label":"Front","x":0,"y":0,"w":28,"h":4,"color":"#4caf50"},
-      {"label":"Back","x":0,"y":16,"w":28,"h":4,"color":"#2196f3"},
-      {"label":"Window","x":0,"y":0,"w":2,"h":20,"color":"#ffc107"}
+      {"label":"Front","x":0,"y":0,"w":28,"h":7,"color":"#4caf50"},
+      {"label":"Back","x":0,"y":13,"w":28,"h":7,"color":"#2196f3"}
+    ],
+    "landmarks": [
+      {"type":"Screen/Board","label":"Screen/Board","x":10,"y":0,"w":8,"h":2,"rotation":0.0},
+      {"type":"Door","label":"Door","x":0,"y":17,"w":2,"h":3,"rotation":0.0}
     ]
   },
   "students": [
@@ -42,7 +45,7 @@
     {"id":"s_20","name":"Tyler Lewis","gender":"M","skill":3,"tags":""}
   ],
   "constraints": [
-    {"type":"proximity","hard":true,"weight":1.0,"studentA":"s_1","studentB":"s_2","mode":"apart"},
+    {"type":"proximity","hard":false,"weight":1.0,"studentA":"s_1","studentB":"s_2","mode":"apart"},
     {"type":"proximity","hard":false,"weight":1.0,"studentA":"s_3","studentB":"s_6","mode":"together"},
     {"type":"zone","hard":true,"weight":1.0,"student":"s_1","zone":"Front","mode":"must_be_in"},
     {"type":"zone","hard":true,"weight":1.0,"student":"s_9","zone":"Front","mode":"must_be_in"},

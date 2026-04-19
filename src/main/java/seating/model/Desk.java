@@ -167,6 +167,19 @@ public abstract class Desk {
     }
 
     /**
+     * Returns the exact rotated shape of this desk for pixel-perfect
+     * collision detection using {@link java.awt.geom.Area}. Unlike
+     * {@link #getRotatedBounds(int)} (which returns an inflated AABB),
+     * this returns the actual oriented rectangle.
+     */
+    public java.awt.Shape getCollisionShape(int gridSize) {
+        double w = getWidthInCells() * gridSize;
+        double h = getHeightInCells() * gridSize;
+        return getTransform(gridSize).createTransformedShape(
+            new Rectangle2D.Double(0, 0, w, h));
+    }
+
+    /**
      * Checks whether this desk's bounding box overlaps another desk.
      *
      * @param other the other desk to check
@@ -175,7 +188,13 @@ public abstract class Desk {
      */
     public boolean collidesWith(Desk other, int gridSize) {
         if (other == this) return false;
-        return getBounds(gridSize).intersects(other.getBounds(gridSize));
+        // Use Area-based intersection for pixel-perfect rotated collision.
+        // AABB checks were too restrictive — they inflate the bounds by √2
+        // for desks rotated at odd angles, blocking valid placements.
+        java.awt.geom.Area a1 = new java.awt.geom.Area(getCollisionShape(gridSize));
+        java.awt.geom.Area a2 = new java.awt.geom.Area(other.getCollisionShape(gridSize));
+        a1.intersect(a2);
+        return !a1.isEmpty();
     }
 
     // ---- Getters and setters ----

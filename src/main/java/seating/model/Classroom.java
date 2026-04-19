@@ -36,7 +36,7 @@ public class Classroom {
 
     /** Creates a default 28x20 classroom with 20px grid cells. Double resolution for fine positioning. */
     public Classroom() {
-        this(28, 20, 20);
+        this(28, 20, 20); // typical classroom size
     }
 
     // ---- Desk management ----
@@ -59,9 +59,11 @@ public class Classroom {
      * @return the desk under the point, or null
      */
     public Desk getDeskAt(double px, double py) {
+        // Use the exact rotated shape for hit-testing so rotated desks are
+        // clickable only where they're actually visible (not the inflated AABB).
         for (int i = desks.size() - 1; i >= 0; i--) {
             Desk d = desks.get(i);
-            if (d.getBounds(gridSize).contains(px, py)) {
+            if (d.getCollisionShape(gridSize).contains(px, py)) {
                 return d;
             }
         }
@@ -80,27 +82,35 @@ public class Classroom {
             if (d == exclude) continue;
             if (desk.collidesWith(d, gridSize)) return true;
         }
-        // Also check desk vs landmarks (both sides rotation-aware)
-        java.awt.geom.Rectangle2D deskBounds = desk.getRotatedBounds(gridSize);
+        // Desk vs landmarks — pixel-perfect Area intersection
+        java.awt.geom.Area deskArea = new java.awt.geom.Area(desk.getCollisionShape(gridSize));
         for (Landmark lm : landmarks) {
-            if (deskBounds.intersects(lm.getRotatedBounds(gridSize))) return true;
+            java.awt.geom.Area lmArea = new java.awt.geom.Area(lm.getCollisionShape(gridSize));
+            lmArea.intersect(deskArea);
+            if (!lmArea.isEmpty()) return true;
         }
         return false;
     }
 
     /**
      * Checks if a landmark at its current position overlaps any desk or other landmark.
+     * Uses pixel-perfect Area intersection instead of AABB to avoid false positives
+     * when items are rotated at odd angles.
      */
     public boolean hasLandmarkCollision(Landmark landmark, Landmark exclude) {
-        java.awt.geom.Rectangle2D lmBounds = landmark.getRotatedBounds(gridSize);
-        // Check vs desks (rotation-aware)
+        java.awt.geom.Area lmArea = new java.awt.geom.Area(landmark.getCollisionShape(gridSize));
+        // Check vs desks
         for (Desk d : desks) {
-            if (lmBounds.intersects(d.getRotatedBounds(gridSize))) return true;
+            java.awt.geom.Area dArea = new java.awt.geom.Area(d.getCollisionShape(gridSize));
+            dArea.intersect(lmArea);
+            if (!dArea.isEmpty()) return true;
         }
-        // Check vs other landmarks (rotation-aware)
+        // Check vs other landmarks
         for (Landmark lm : landmarks) {
             if (lm == exclude) continue;
-            if (lmBounds.intersects(lm.getRotatedBounds(gridSize))) return true;
+            java.awt.geom.Area other = new java.awt.geom.Area(lm.getCollisionShape(gridSize));
+            other.intersect(lmArea);
+            if (!other.isEmpty()) return true;
         }
         return false;
     }
@@ -225,6 +235,34 @@ public class Classroom {
             }
         }
 
+        // Resolve desk-desk collisions after scaling. Try nudging overlapping
+        // desks; drop them if they can't be resolved in a few attempts.
+        boolean changed = true;
+        int passes = 0;
+        while (changed && passes < 3) {
+            changed = false;
+            passes++;
+            java.util.Iterator<Desk> cit = desks.iterator();
+            while (cit.hasNext()) {
+                Desk d = cit.next();
+                if (hasCollision(d, d)) {
+                    // Try nudging right, then down, then diagonal
+                    boolean resolved = false;
+                    for (int[] nudge : new int[][]{{1,0},{0,1},{1,1},{-1,0},{0,-1}}) {
+                        int nx = d.getGridX() + nudge[0];
+                        int ny = d.getGridY() + nudge[1];
+                        if (nx >= 0 && ny >= 0 &&
+                            nx + d.getWidthInCells() <= gridColumns &&
+                            ny + d.getHeightInCells() <= gridRows) {
+                            d.setPosition(nx, ny);
+                            if (!hasCollision(d, d)) { resolved = true; changed = true; break; }
+                        }
+                    }
+                    if (!resolved) { cit.remove(); changed = true; }
+                }
+            }
+        }
+
         // Remove landmarks that no longer fit (checks ROTATED AABB so rotated
         // landmarks whose visual footprint exceeds the new grid are dropped).
         java.util.Iterator<Landmark> lit = landmarks.iterator();
@@ -237,6 +275,25 @@ public class Classroom {
                 rb.getX() + rb.getWidth() > maxPixW ||
                 rb.getY() + rb.getHeight() > maxPixH) {
                 lit.remove();
+            }
+        }
+
+        // Resolve landmark collisions similarly
+        for (java.util.Iterator<Landmark> lcit = landmarks.iterator(); lcit.hasNext();) {
+            Landmark lm = lcit.next();
+            if (hasLandmarkCollision(lm, lm)) {
+                boolean resolved = false;
+                for (int[] nudge : new int[][]{{1,0},{0,1},{1,1},{-1,0},{0,-1}}) {
+                    int nx = lm.getGridX() + nudge[0];
+                    int ny = lm.getGridY() + nudge[1];
+                    if (nx >= 0 && ny >= 0 &&
+                        nx + lm.getGridW() <= gridColumns &&
+                        ny + lm.getGridH() <= gridRows) {
+                        lm.setPosition(nx, ny);
+                        if (!hasLandmarkCollision(lm, lm)) { resolved = true; break; }
+                    }
+                }
+                if (!resolved) lcit.remove();
             }
         }
     }

@@ -63,7 +63,9 @@ public class MainFrame extends JFrame {
                 if (arr == null) {
                     arrangementPanel.setResult(null, null, null);
                 } else {
-                    arrangementPanel.refreshCurrentArrangement();
+                    arrangementPanel.rescoreAll(
+                        classroomPanel.getConstraintSet(),
+                        classroomPanel.getSeatGraph());
                 }
             }
         });
@@ -76,15 +78,15 @@ public class MainFrame extends JFrame {
         initialSnapshot = seating.layout.ResetCommand.Snapshot.capture(classroom);
 
         pack();
-        setMinimumSize(UIScale.dimension(900, 600));
+        setMinimumSize(new Dimension(900, 600));
         setLocationRelativeTo(null);
     }
 
     private void buildUI() {
         setLayout(new BorderLayout(0, 0));
 
-        // Toolbar
-        add(createToolbar(), BorderLayout.NORTH);
+        // Create control buttons and add them to the left palette (no top toolbar)
+        addControlButtonsToPalette();
 
         // Left: Desk palette
         JScrollPane paletteScroll = new JScrollPane(deskPalette);
@@ -99,7 +101,7 @@ public class MainFrame extends JFrame {
 
         // Right: Tabbed side panel (Students/Rules/Results tabs)
         sidePanel = new JTabbedPane();
-        sidePanel.setPreferredSize(UIScale.dimension(320, 0));
+        sidePanel.setPreferredSize(new Dimension(380, 0));
         sidePanel.addTab("Students", studentPanel);
         sidePanel.addTab("Rules", constraintPanel);
         sidePanel.addTab("Results", arrangementPanel);
@@ -112,11 +114,11 @@ public class MainFrame extends JFrame {
             BorderFactory.createEmptyBorder(4, 10, 4, 10)));
         statusBar.setBackground(new Color(248, 248, 250));
         statusLabel = new JLabel("Desks: 0 | Seats: 0");
-        statusLabel.setFont(UIScale.font("SansSerif", Font.PLAIN, 12));
+        statusLabel.setFont(new Font("SansSerif", Font.PLAIN, 12));
         statusLabel.setForeground(new Color(100, 100, 105));
         statusBar.add(statusLabel, BorderLayout.WEST);
         JLabel creditLabel = new JLabel("Created by Harley Chu");
-        creditLabel.setFont(UIScale.font("SansSerif", Font.ITALIC, 11));
+        creditLabel.setFont(new Font("SansSerif", Font.ITALIC, 11));
         creditLabel.setForeground(new Color(140, 140, 145));
         statusBar.add(creditLabel, BorderLayout.EAST);
         add(statusBar, BorderLayout.SOUTH);
@@ -130,70 +132,63 @@ public class MainFrame extends JFrame {
         statusTimer.start();
     }
 
-    private JToolBar createToolbar() {
-        JToolBar toolbar = new JToolBar();
-        toolbar.setFloatable(false);
-        toolbar.setBorder(BorderFactory.createCompoundBorder(
-            BorderFactory.createMatteBorder(0, 0, 1, 0, new Color(210, 210, 215)),
-            BorderFactory.createEmptyBorder(4, 8, 4, 8)
-        ));
-        toolbar.setBackground(new Color(252, 252, 254));
+    /**
+     * Creates control buttons (Save, Load, Generate, etc.) and adds them
+     * to the left DeskPalette panel so there's no top toolbar.
+     */
+    private void addControlButtonsToPalette() {
+        java.util.List<javax.swing.JComponent> buttons = new java.util.ArrayList<javax.swing.JComponent>();
 
-        // File operations
+        // Row: Save + Load
+        JPanel fileRow = new JPanel(new java.awt.GridLayout(1, 2, 4, 0));
+        fileRow.setOpaque(false);
+        fileRow.setMaximumSize(new Dimension(Short.MAX_VALUE, 32));
         JButton saveBtn = new JButton("Save");
         saveBtn.setToolTipText("Save project to JSON");
         saveBtn.addActionListener(new java.awt.event.ActionListener() {
             public void actionPerformed(java.awt.event.ActionEvent e) { saveProject(); }
         });
-        toolbar.add(saveBtn);
-
         JButton loadBtn = new JButton("Load");
         loadBtn.setToolTipText("Load project from JSON");
         loadBtn.addActionListener(new java.awt.event.ActionListener() {
             public void actionPerformed(java.awt.event.ActionEvent e) { loadProject(); }
         });
-        toolbar.add(loadBtn);
+        fileRow.add(saveBtn);
+        fileRow.add(loadBtn);
+        buttons.add(fileRow);
 
-        toolbar.addSeparator();
-
-        // Generate
-        generateBtn = new JButton("Generate Seating");
+        // Generate Seating (full-width, prominent)
+        generateBtn = new JButton("\u25B6 Generate Seating");
         generateBtn.setToolTipText("Run CSP solver to generate arrangements");
+        generateBtn.setFont(new Font("SansSerif", Font.BOLD, 12));
         generateBtn.addActionListener(new java.awt.event.ActionListener() {
-            public void actionPerformed(java.awt.event.ActionEvent e) {
-                generateSeating();
-            }
+            public void actionPerformed(java.awt.event.ActionEvent e) { generateSeating(); }
         });
-        toolbar.add(generateBtn);
+        buttons.add(generateBtn);
 
-        toolbar.addSeparator();
-
-        // Undo / Redo
+        // Row: Undo + Redo
+        JPanel undoRow = new JPanel(new java.awt.GridLayout(1, 2, 4, 0));
+        undoRow.setOpaque(false);
+        undoRow.setMaximumSize(new Dimension(Short.MAX_VALUE, 32));
         undoBtn = new JButton("Undo");
-        undoBtn.setToolTipText("Undo last action (Ctrl+Z)");
+        undoBtn.setToolTipText("Undo (Ctrl+Z)");
         undoBtn.addActionListener(new java.awt.event.ActionListener() {
             public void actionPerformed(java.awt.event.ActionEvent e) {
-                if (undoManager.undo()) {
-                    classroomPanel.repaint();
-                }
+                if (undoManager.undo()) classroomPanel.repaint();
             }
         });
-        toolbar.add(undoBtn);
-
         redoBtn = new JButton("Redo");
-        redoBtn.setToolTipText("Redo last action (Ctrl+Y)");
+        redoBtn.setToolTipText("Redo (Ctrl+Y)");
         redoBtn.addActionListener(new java.awt.event.ActionListener() {
             public void actionPerformed(java.awt.event.ActionEvent e) {
-                if (undoManager.redo()) {
-                    classroomPanel.repaint();
-                }
+                if (undoManager.redo()) classroomPanel.repaint();
             }
         });
-        toolbar.add(redoBtn);
+        undoRow.add(undoBtn);
+        undoRow.add(redoBtn);
+        buttons.add(undoRow);
 
-        toolbar.addSeparator();
-
-        // Clear all
+        // Clear all dropdown
         final JButton clearBtn = new JButton("Clear All \u25BE");
         clearBtn.addActionListener(new java.awt.event.ActionListener() {
             public void actionPerformed(java.awt.event.ActionEvent e) {
@@ -257,8 +252,12 @@ public class MainFrame extends JFrame {
                     public void actionPerformed(java.awt.event.ActionEvent ae) {
                         java.util.Iterator<Zone> zit = classroom.getZones().iterator();
                         while (zit.hasNext()) {
-                            String label = zit.next().getLabel();
-                            if (!"Front".equals(label) && !"Back".equals(label)) zit.remove();
+                            Zone z = zit.next();
+                            if (!"Front".equals(z.getLabel()) && !"Back".equals(z.getLabel())) {
+                                // Clean up constraints referencing this zone
+                                constraintPanel.removeConstraintsForZone(z);
+                                zit.remove();
+                            }
                         }
                         classroomPanel.invalidateArrangement();
                         classroomPanel.repaint();
@@ -327,11 +326,9 @@ public class MainFrame extends JFrame {
                 popup.show(clearBtn, 0, clearBtn.getHeight());
             }
         });
-        toolbar.add(clearBtn);
+        buttons.add(clearBtn);
 
-        toolbar.addSeparator();
-
-        // Heat map toggle
+        // Heat Map toggle (full-width so label isn't truncated)
         final JButton heatMapBtn = new JButton("Heat Map: OFF");
         heatMapBtn.setToolTipText("Toggle constraint satisfaction heat map");
         heatMapBtn.addActionListener(new java.awt.event.ActionListener() {
@@ -341,26 +338,27 @@ public class MainFrame extends JFrame {
                     ? "Heat Map: ON" : "Heat Map: OFF");
             }
         });
-        toolbar.add(heatMapBtn);
+        buttons.add(heatMapBtn);
 
-        // Export to PNG
+        // Export PNG (full-width)
         JButton exportBtn = new JButton("Export PNG");
         exportBtn.setToolTipText("Export seating chart as high-res PNG image");
         exportBtn.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent e) { exportPng(); }
+        });
+        buttons.add(exportBtn);
+
+        // Room Size button
+        JButton roomSizeBtn = new JButton("Room Size");
+        roomSizeBtn.setToolTipText("Change classroom dimensions");
+        roomSizeBtn.addActionListener(new java.awt.event.ActionListener() {
             public void actionPerformed(java.awt.event.ActionEvent e) {
-                exportPng();
+                deskPalette.showRoomSetupDialog();
             }
         });
-        toolbar.add(exportBtn);
+        buttons.add(roomSizeBtn);
 
-        toolbar.add(Box.createHorizontalGlue());
-
-        JLabel modeLabel = new JLabel("SeatSolver v2.0");
-        modeLabel.setFont(UIScale.font("SansSerif", Font.ITALIC, 11));
-        modeLabel.setForeground(new Color(130, 130, 135));
-        toolbar.add(modeLabel);
-
-        return toolbar;
+        deskPalette.addControlButtons(buttons);
     }
 
     private JPanel createPlaceholderPanel(String text) {
@@ -376,11 +374,13 @@ public class MainFrame extends JFrame {
     private void addDefaultZones() {
         int cols = classroom.getGridColumns();
         int rows = classroom.getGridRows();
-        classroom.addZone(new Zone("Front", 0, 0, cols, 4,
+        // Each zone covers ~1/3 of the room vertically
+        int zoneH = rows / 3;
+        classroom.addZone(new Zone("Front", 0, 0, cols, zoneH,
             new Color(76, 175, 80)));
-        classroom.addZone(new Zone("Back", 0, rows - 4,
-            cols, 4, new Color(33, 150, 243)));
-        // Default landmarks — sizes MATCH the palette (screen 8×2, door 2×3)
+        classroom.addZone(new Zone("Back", 0, rows - zoneH,
+            cols, zoneH, new Color(33, 150, 243)));
+        // Default landmarks — sizes match the palette
         int screenW = 8;
         classroom.addLandmark(new Landmark(Landmark.SCREEN,
             Math.max(0, (cols - screenW) / 2), 0, screenW, 2));
@@ -482,7 +482,9 @@ public class MainFrame extends JFrame {
                 arrangementPanel = new ArrangementPanel(classroomPanel);
                 classroomPanel.setArrangementChangeListener(new ClassroomPanel.ArrangementChangeListener() {
                     public void onArrangementChanged(seating.model.SeatingArrangement arr) {
-                        arrangementPanel.refreshCurrentArrangement();
+                        arrangementPanel.rescoreAll(
+                        classroomPanel.getConstraintSet(),
+                        classroomPanel.getSeatGraph());
                     }
                 });
 
@@ -493,7 +495,15 @@ public class MainFrame extends JFrame {
                 repaint();
                 studentPanel.refresh();
 
-                JOptionPane.showMessageDialog(this, "Project loaded successfully.");
+                // Recapture initial snapshot so "Reset to Initial Layout" uses the
+                // loaded project as the new baseline, not the previous session's state.
+                initialSnapshot = seating.layout.ResetCommand.Snapshot.capture(classroom);
+
+                String loadMsg = "Project loaded successfully.";
+                if (loaded.loadWarning != null) {
+                    loadMsg += "\n\nWarning: " + loaded.loadWarning;
+                }
+                JOptionPane.showMessageDialog(this, loadMsg);
             } catch (Exception ex) {
                 JOptionPane.showMessageDialog(this, "Error loading: " + ex.getMessage(),
                     "Load Error", JOptionPane.ERROR_MESSAGE);
@@ -546,9 +556,24 @@ public class MainFrame extends JFrame {
         sidePanel.setSelectedIndex(2); // switch to Results tab
 
         if (result.isEmpty()) {
-            JOptionPane.showMessageDialog(this,
-                "No valid arrangements found.\n"
-                + "Try relaxing some constraints or adding more seats.",
+            StringBuilder noSolMsg = new StringBuilder(
+                "No valid arrangements found.\n\n");
+            // List hard constraints that may be blocking the solver
+            boolean hasHard = false;
+            for (seating.constraint.Constraint c : constraintSet.getAll()) {
+                if (c.isHard()) {
+                    if (!hasHard) {
+                        noSolMsg.append("Hard constraints that may be impossible to satisfy:\n");
+                        hasHard = true;
+                    }
+                    noSolMsg.append("  \u2022 ").append(c.describe()).append("\n");
+                }
+            }
+            if (!hasHard) {
+                noSolMsg.append("No hard constraints found — the room may not have enough seats.\n");
+            }
+            noSolMsg.append("\nTry relaxing hard constraints, removing conflicting rules, or adding more seats.");
+            JOptionPane.showMessageDialog(this, noSolMsg.toString(),
                 "No Solutions", JOptionPane.WARNING_MESSAGE);
         } else {
             JOptionPane.showMessageDialog(this,

@@ -84,10 +84,18 @@ public class BalanceConstraint implements Constraint {
         variance /= proportions.size();
 
         double stdDev = Math.sqrt(variance);
-        // Gentler scoring: stdDev of 0.5 (worst case) gives ~0.0
-        // stdDev of 0.1 (slight imbalance) gives ~0.8
-        // stdDev of 0.0 (perfect) gives 1.0
-        return Math.max(0.0, 1.0 - stdDev * 1.5);
+
+        // Relative scoring: compare against the WORST possible deviation
+        // (all target students on one desk). This makes "pretty good balance"
+        // show as 80-90%, not 25%, since absolute stdDev is misleading when
+        // desks have different sizes.
+        //
+        // Worst-case stdDev occurs when one desk has ratio=1.0 and all
+        // others have ratio=0.0 (or vice versa). With N groups, worst ≈ 0.5.
+        // Curve: score = 1 - (stdDev / 0.5)^0.6  (concave — generous)
+        double worstCase = 0.5;
+        double normalized = Math.min(1.0, stdDev / worstCase);
+        return Math.max(0.0, 1.0 - Math.pow(normalized, 0.6));
     }
 
     private boolean matchesTarget(Student s) {
@@ -102,7 +110,7 @@ public class BalanceConstraint implements Constraint {
     }
 
     public boolean isSatisfied(SeatingArrangement arrangement, SeatGraph graph) {
-        return evaluate(arrangement, graph) >= 0.7; // 70% threshold for "satisfied"
+        return evaluate(arrangement, graph) >= 0.5; // 50% threshold — soft, generous
     }
 
     public boolean isHard() { return hard; }

@@ -28,6 +28,7 @@ public class CSPSolver {
     private long timeoutMs;
     private long startTime;
     private int returnCount;
+    private java.util.Random shuffleRandom = new java.util.Random();
 
     /**
      * Creates a new CSP solver.
@@ -69,12 +70,14 @@ public class CSPSolver {
         pruneInitialDomains(baseDomains, students, seats);
 
         // Pass 1: Greedy (score-guided domain ordering)
-        int internalMax = Math.max(maxSolutions * 2, 10); // find more, return best
+        int internalMax = Math.max(maxSolutions * 3, 15); // find extra for diversity filter
         solvePass(students, baseDomains, result, internalMax, false);
 
-        // Pass 2+: Randomized passes for variety (if time remains)
-        for (int pass = 0; pass < 3; pass++) {
+        // Pass 2+: Randomized passes with different seeds for genuine variety.
+        // Using nanoTime + offset ensures different results each click of Generate.
+        for (int pass = 0; pass < 5; pass++) {
             if (System.currentTimeMillis() - startTime > timeoutMs * 0.8) break;
+            shuffleRandom = new java.util.Random(System.nanoTime() + pass * 7919L);
             solvePass(students, baseDomains, result, internalMax, true);
         }
 
@@ -84,13 +87,33 @@ public class CSPSolver {
             SeatingArrangement improved = localSearchOptimize(arr, seats);
             optimized.add(improved);
         }
-        // Rebuild result with optimized arrangements
-        SolverResult finalResult = new SolverResult();
+
+        // Sort by score descending so the diversity filter keeps the BEST
+        // arrangements first and drops lower-scoring duplicates.
+        Collections.sort(optimized, new java.util.Comparator<SeatingArrangement>() {
+            public int compare(SeatingArrangement a, SeatingArrangement b) {
+                return Double.compare(b.getScore(), a.getScore());
+            }
+        });
+
+        // Diversity filter: drop arrangements that are > 80% similar to a
+        // better-scoring one, so the user sees genuinely different options.
+        List<SeatingArrangement> diverse = new ArrayList<SeatingArrangement>();
         for (SeatingArrangement arr : optimized) {
+            boolean tooSimilar = false;
+            for (SeatingArrangement kept : diverse) {
+                if (similarity(arr, kept) > 0.80) { tooSimilar = true; break; }
+            }
+            if (!tooSimilar) diverse.add(arr);
+            if (diverse.size() >= returnCount) break;
+        }
+
+        SolverResult finalResult = new SolverResult();
+        for (SeatingArrangement arr : diverse) {
             finalResult.add(arr);
         }
 
-        // Trim to requested count
+        // Trim to requested count (shouldn't be needed after filter, but safety)
         while (finalResult.size() > returnCount) {
             finalResult.getAll().remove(finalResult.size() - 1);
         }
@@ -175,7 +198,7 @@ public class CSPSolver {
         // Order domain: greedy (score-guided) or randomized
         List<Seat> orderedDomain = new ArrayList<Seat>(domain);
         if (randomize) {
-            Collections.shuffle(orderedDomain);
+            Collections.shuffle(orderedDomain, shuffleRandom);
         } else {
             // Score-guided: try seats that best satisfy soft constraints first
             orderByScore(orderedDomain, selected, assignment);
@@ -494,5 +517,22 @@ public class CSPSolver {
                 domain.addAll(entry.getValue());
             }
         }
+    }
+
+    /**
+     * Returns the fraction of students assigned to the SAME seat in both
+     * arrangements. 0.0 = completely different, 1.0 = identical.
+     */
+    private double similarity(SeatingArrangement a, SeatingArrangement b) {
+        HashMap<Seat, Student> mapA = a.getAssignmentMap();
+        HashMap<Seat, Student> mapB = b.getAssignmentMap();
+        if (mapA.isEmpty()) return 0.0;
+        int same = 0;
+        for (Map.Entry<Seat, Student> entry : mapA.entrySet()) {
+            if (entry.getValue() != null && entry.getValue().equals(mapB.get(entry.getKey()))) {
+                same++;
+            }
+        }
+        return (double) same / mapA.size();
     }
 }

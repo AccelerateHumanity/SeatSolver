@@ -1,5 +1,4 @@
 package seating.model;
-import seating.ui.UIScale;
 
 import java.awt.*;
 import java.awt.geom.RoundRectangle2D;
@@ -102,7 +101,7 @@ public class Landmark {
         // Draw label — counter-rotate so text stays readable at any landmark rotation
         g.setColor(textColor);
         int fontSize = Math.min(11, Math.min(pw, ph) / 4 + 3);
-        g.setFont(UIScale.font("SansSerif", Font.BOLD, Math.max(8, fontSize)));
+        g.setFont(new Font("SansSerif", Font.BOLD, Math.max(8, fontSize)));
         FontMetrics fm = g.getFontMetrics();
 
         // Counter-rotate around the center of the landmark so text is always upright
@@ -196,6 +195,14 @@ public class Landmark {
             maxY = Math.max(maxY, corners[i]);
         }
         return new java.awt.geom.Rectangle2D.Double(minX, minY, maxX - minX, maxY - minY);
+    }
+
+    /**
+     * Returns the exact rotated shape for pixel-perfect collision detection.
+     */
+    public java.awt.Shape getCollisionShape(int gs) {
+        return getTransform(gs).createTransformedShape(
+            new java.awt.geom.Rectangle2D.Double(0, 0, gridW * gs, gridH * gs));
     }
 
     /**

@@ -45,7 +45,7 @@ public class CircleTable extends Desk {
         double centerY = totalH / 2.0;
 
         // Table surface (circle)
-        double tableRadius = Math.min(totalW, totalH) / 2.0 - 14;
+        double tableRadius = Math.max(4, Math.min(totalW, totalH) / 2.0 - 14);
         g.setColor(new Color(180, 140, 100));
         g.fill(new Ellipse2D.Double(
             centerX - tableRadius, centerY - tableRadius,
