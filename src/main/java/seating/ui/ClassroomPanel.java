@@ -376,6 +376,17 @@ public class ClassroomPanel extends JPanel {
     private void toggleDisco() {
         discoMode = !discoMode;
         if (discoMode) {
+            // Force-finish any in-flight snap-back animation so disco starts
+            // with each desk at its settled grid position (not mid-flight).
+            // Without this, toggling disco during the 120ms snap window
+            // captures the bad pre-snap position and "freezes" overlap on exit.
+            if (animTimer != null && animTimer.isRunning()) {
+                animTimer.stop();
+                if (animatingDesk != null) {
+                    animatingDesk.setPosition(animTargetGx, animTargetGy);
+                }
+                animatingDesk = null;
+            }
             // Cancel any in-flight drag/ghost interaction. If the user was
             // mid-drag when disco started, the drop logic would otherwise
             // never run — leaving the desk in a half-moved (and possibly
@@ -910,6 +921,18 @@ public class ClassroomPanel extends JPanel {
                     if (pos != null) lm.setPosition(pos[0], pos[1]);
                 }
             }
+            // Refresh stale rotation-batch snapshots for all selected items
+            // so a deferred rotation commit reverts to the correct settled position.
+            for (Desk d : selectedDesks) {
+                if (rotationBatchStartDeskPos.containsKey(d)) {
+                    rotationBatchStartDeskPos.put(d, new int[]{d.getGridX(), d.getGridY()});
+                }
+            }
+            for (Landmark lm : selectedLandmarks) {
+                if (rotationBatchStartLmPos.containsKey(lm)) {
+                    rotationBatchStartLmPos.put(lm, new int[]{lm.getGridX(), lm.getGridY()});
+                }
+            }
             repaint();
             return;
         }
@@ -931,6 +954,11 @@ public class ClassroomPanel extends JPanel {
                 undoManager.execute(new MoveLandmarkCommand(selectedLandmark,
                     lmDragStartGx, lmDragStartGy, newGx, newGy));
                 refreshLiveScore();
+            }
+            // Refresh stale rotation-batch snapshot if this landmark was being rotated mid-drag.
+            if (rotationBatchStartLmPos.containsKey(selectedLandmark)) {
+                rotationBatchStartLmPos.put(selectedLandmark,
+                    new int[]{selectedLandmark.getGridX(), selectedLandmark.getGridY()});
             }
             repaint();
             return;
@@ -962,6 +990,10 @@ public class ClassroomPanel extends JPanel {
             // Check collision — if colliding, animate snap back to original
             if (classroom.hasCollision(selectedDesk, selectedDesk)) {
                 int gs = classroom.getGridSize();
+                // Authoritatively set gridX/Y now (no waiting for animation) so
+                // any subsequent action (disco toggle, rotation commit) sees the
+                // settled position, not a mid-animation overlap.
+                selectedDesk.setPosition(dragStartGx, dragStartGy);
                 startSnapAnimation(selectedDesk, newGx * gs, newGy * gs, dragStartGx, dragStartGy);
             } else if (newGx != dragStartGx || newGy != dragStartGy) {
                 // Execute as command (for undo), then animate
@@ -970,6 +1002,14 @@ public class ClassroomPanel extends JPanel {
                     dragStartGx, dragStartGy, newGx, newGy));
                 // Live-refresh arrangement score after desk moved
                 refreshLiveScore();
+            }
+            // If a rotation batch was running during this drag, its saved
+            // pre-rotation position is the mid-drag spot — stale now.
+            // Refresh the snapshot to the FINAL settled position so a
+            // collision-revert during commit restores correctly.
+            if (rotationBatchStartDeskPos.containsKey(selectedDesk)) {
+                rotationBatchStartDeskPos.put(selectedDesk,
+                    new int[]{selectedDesk.getGridX(), selectedDesk.getGridY()});
             }
             repaint();
         }
