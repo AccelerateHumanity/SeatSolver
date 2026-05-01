@@ -24,8 +24,8 @@ public class DeskPalette extends JPanel {
     public DeskPalette(ClassroomPanel canvasPanel) {
         this.canvasPanel = canvasPanel;
         setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
-        setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
-        setPreferredSize(new Dimension(200, 0));
+        setBorder(UIScale.emptyBorder(8, 8, 8, 8));
+        setPreferredSize(UIScale.dimension(200, 0));
         setBackground(new Color(250, 250, 252));
 
         addDeskSection();
@@ -41,20 +41,20 @@ public class DeskPalette extends JPanel {
         for (javax.swing.JComponent btn : buttons) {
             btn.setAlignmentX(Component.LEFT_ALIGNMENT);
             // Ensure ALL components (JButton and JPanel rows) stretch to full width
-            btn.setMaximumSize(new Dimension(Short.MAX_VALUE, 34));
+            btn.setMaximumSize(new Dimension(Short.MAX_VALUE, UIScale.scaled(34)));
             add(btn, insertAt++);
             add(Box.createVerticalStrut(3), insertAt++);
         }
         add(Box.createVerticalStrut(8), insertAt++);
         javax.swing.JSeparator sep = new javax.swing.JSeparator(javax.swing.SwingConstants.HORIZONTAL);
-        sep.setMaximumSize(new Dimension(Short.MAX_VALUE, 2));
+        sep.setMaximumSize(new Dimension(Short.MAX_VALUE, UIScale.scaled(2)));
         add(sep, insertAt++);
         add(Box.createVerticalStrut(8), insertAt);
     }
 
     private void addDeskSection() {
         JLabel header = new JLabel("Desk Types");
-        header.setFont(new Font("SansSerif", Font.BOLD, 13));
+        header.setFont(UIScale.font("SansSerif", Font.BOLD, 13));
         header.setAlignmentX(Component.LEFT_ALIGNMENT);
         add(header);
         add(Box.createVerticalStrut(8));
@@ -69,7 +69,7 @@ public class DeskPalette extends JPanel {
 
         // Zone section
         JLabel zoneHeader = new JLabel("Zones");
-        zoneHeader.setFont(new Font("SansSerif", Font.BOLD, 13));
+        zoneHeader.setFont(UIScale.font("SansSerif", Font.BOLD, 13));
         zoneHeader.setAlignmentX(Component.LEFT_ALIGNMENT);
         add(zoneHeader);
         add(Box.createVerticalStrut(8));
@@ -77,7 +77,7 @@ public class DeskPalette extends JPanel {
         JButton addZoneBtn = new JButton("+ Add Zone");
         addZoneBtn.setToolTipText("Click-drag on canvas to define a zone");
         addZoneBtn.setAlignmentX(Component.LEFT_ALIGNMENT);
-        addZoneBtn.setMaximumSize(new Dimension(Short.MAX_VALUE, 32));
+        addZoneBtn.setMaximumSize(new Dimension(Short.MAX_VALUE, UIScale.scaled(32)));
         addZoneBtn.setFocusPainted(false);
         addZoneBtn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         addZoneBtn.addActionListener(new ActionListener() {
@@ -115,7 +115,7 @@ public class DeskPalette extends JPanel {
 
         // Landmarks
         JLabel landmarkHeader = new JLabel("Landmarks");
-        landmarkHeader.setFont(new Font("SansSerif", Font.BOLD, 13));
+        landmarkHeader.setFont(UIScale.font("SansSerif", Font.BOLD, 13));
         landmarkHeader.setAlignmentX(Component.LEFT_ALIGNMENT);
         add(landmarkHeader);
         add(Box.createVerticalStrut(8));
@@ -136,7 +136,7 @@ public class DeskPalette extends JPanel {
             + "</div></html>");
         tip.setHorizontalAlignment(SwingConstants.CENTER);
         tip.setAlignmentX(Component.LEFT_ALIGNMENT);
-        tip.setMaximumSize(new Dimension(Short.MAX_VALUE, 200));
+        tip.setMaximumSize(new Dimension(Short.MAX_VALUE, UIScale.scaled(200)));
         add(tip);
 
         add(Box.createVerticalGlue());
@@ -146,7 +146,7 @@ public class DeskPalette extends JPanel {
         JButton btn = new JButton(label);
         btn.setToolTipText(tooltip);
         btn.setAlignmentX(Component.LEFT_ALIGNMENT);
-        btn.setMaximumSize(new Dimension(Short.MAX_VALUE, 32));
+        btn.setMaximumSize(new Dimension(Short.MAX_VALUE, UIScale.scaled(32)));
         btn.setFocusPainted(false);
         btn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
 
@@ -174,9 +174,9 @@ public class DeskPalette extends JPanel {
     private void addLandmarkButton(final String type, final int w, final int h) {
         JButton btn = new JButton(type);
         btn.setAlignmentX(Component.LEFT_ALIGNMENT);
-        btn.setMaximumSize(new Dimension(Short.MAX_VALUE, 30));
+        btn.setMaximumSize(new Dimension(Short.MAX_VALUE, UIScale.scaled(30)));
         btn.setFocusPainted(false);
-        btn.setFont(new Font("SansSerif", Font.PLAIN, 11));
+        btn.setFont(UIScale.font("SansSerif", Font.PLAIN, 11));
         btn.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent e) {
                 // Ghost placement — hand a landmark to the canvas, user picks

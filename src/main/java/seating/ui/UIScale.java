@@ -2,6 +2,8 @@ package seating.ui;
 
 import java.awt.*;
 import java.awt.geom.AffineTransform;
+import javax.swing.BorderFactory;
+import javax.swing.border.Border;
 
 /**
  * DPI-aware scaling utility. Detects whether the JVM is already applying
@@ -13,7 +15,7 @@ import java.awt.geom.AffineTransform;
  * modern Java + Windows, this is effectively a no-op — the JVM handles
  * all HiDPI scaling for fonts, dimensions, and Graphics2D rendering.
  * Applying additional scaling on top of that would double-scale and
- * break layout (see v1.3.0 4K@250% bug).
+ * break layout.
  */
 public final class UIScale {
 
@@ -25,7 +27,7 @@ public final class UIScale {
     /**
      * Decides whether we need to apply a manual scale factor.
      * Returns 1.0 if the JVM is already auto-scaling (Java 9+ DPI-aware mode).
-     * Only returns > 1.0 on older JVMs where we must compensate ourselves.
+     * Only returns &gt; 1.0 on older JVMs where we must compensate ourselves.
      */
     private static float detectScale() {
         try {
@@ -53,7 +55,7 @@ public final class UIScale {
         }
     }
 
-    /** Returns the display scale factor (1.0 on modern Java, >1 on older JVMs). */
+    /** Returns the display scale factor (1.0 on modern Java, &gt;1 on older JVMs). */
     public static float scale() { return SCALE; }
 
     /** Scales a pixel/point value by the display factor. */
@@ -71,28 +73,35 @@ public final class UIScale {
         return new Dimension(scaled(width), scaled(height));
     }
 
+    /** Creates an empty border with each side scaled by the display factor. */
+    public static Border emptyBorder(int top, int left, int bottom, int right) {
+        return BorderFactory.createEmptyBorder(
+            scaled(top), scaled(left), scaled(bottom), scaled(right));
+    }
+
     /**
      * Overrides the Swing Look &amp; Feel default fonts with a larger baseline
      * so toolbar buttons, tables, menus, and tooltips are readable on
      * HiDPI and regular displays alike. Must be called AFTER
      * UIManager.setLookAndFeel(...) and BEFORE creating any Swing windows.
      *
-     * <p>All fonts smaller than the given minimum point size are bumped
-     * to that size; larger fonts are left alone so headings and monospace
-     * defaults keep their design sizes.
+     * <p>All fonts smaller than the given minimum point size (after scaling)
+     * are bumped to that size; larger fonts are left alone so headings and
+     * monospace defaults keep their design sizes.
      *
      * @param minSize minimum point size for all default fonts (e.g. 13)
      */
     public static void installUIDefaults(int minSize) {
+        int floor = scaled(minSize);
         java.util.Enumeration<Object> keys = javax.swing.UIManager.getDefaults().keys();
         while (keys.hasMoreElements()) {
             Object key = keys.nextElement();
             Object value = javax.swing.UIManager.get(key);
             if (value instanceof Font) {
                 Font f = (Font) value;
-                if (f.getSize() < minSize) {
+                if (f.getSize() < floor) {
                     javax.swing.UIManager.put(key,
-                        new javax.swing.plaf.FontUIResource(f.deriveFont((float) minSize)));
+                        new javax.swing.plaf.FontUIResource(f.deriveFont((float) floor)));
                 }
             }
         }

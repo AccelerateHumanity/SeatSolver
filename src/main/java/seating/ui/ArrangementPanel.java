@@ -45,11 +45,11 @@ public class ArrangementPanel extends JPanel {
 
         setLayout(new BorderLayout(0, 4));
         setBackground(new Color(250, 250, 252));
-        setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
+        setBorder(UIScale.emptyBorder(8, 8, 8, 8));
 
         // Header
         headerLabel = new JLabel("No arrangements yet.");
-        headerLabel.setFont(new Font("SansSerif", Font.BOLD, 12));
+        headerLabel.setFont(UIScale.font("SansSerif", Font.BOLD, 12));
         add(headerLabel, BorderLayout.NORTH);
 
         // Center: arrangement list + detail split
@@ -62,7 +62,7 @@ public class ArrangementPanel extends JPanel {
         listPanel.setOpaque(false);
         JScrollPane listScroll = new JScrollPane(listPanel);
         listScroll.setBorder(null);
-        listScroll.setPreferredSize(new Dimension(0, 160));
+        listScroll.setPreferredSize(UIScale.dimension(0, 160));
         centerPanel.add(listScroll, BorderLayout.NORTH);
 
         // Violation detail area
@@ -160,30 +160,30 @@ public class ArrangementPanel extends JPanel {
 
             // Card panel
             JPanel card = new JPanel(new BorderLayout(6, 0));
-            card.setMaximumSize(new Dimension(Integer.MAX_VALUE, 36));
+            card.setMaximumSize(new Dimension(Integer.MAX_VALUE, UIScale.scaled(36)));
             card.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createMatteBorder(0, 0, 1, 0, new Color(230, 230, 235)),
-                BorderFactory.createEmptyBorder(4, 6, 4, 6)
+                UIScale.emptyBorder(4, 6, 4, 6)
             ));
             card.setBackground(new Color(255, 255, 255));
             card.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
 
             // Score indicator (colored dot)
             JLabel dot = new JLabel("\u25CF");
-            dot.setFont(new Font("SansSerif", Font.PLAIN, 14));
+            dot.setFont(UIScale.font("SansSerif", Font.PLAIN, 14));
             dot.setForeground(scoreColor(score));
             card.add(dot, BorderLayout.WEST);
 
             // Text: "#1 — 92.0%"
             JLabel label = new JLabel("#" + (i + 1) + " \u2014 " + String.format("%.1f%%", score * 100));
-            label.setFont(new Font("SansSerif", Font.BOLD, 12));
+            label.setFont(UIScale.font("SansSerif", Font.BOLD, 12));
             label.setForeground(new Color(30, 30, 35));
             card.add(label, BorderLayout.CENTER);
 
             // Violation count
             String vText = violationCount == 0 ? "\u2713" : violationCount + " issue" + (violationCount > 1 ? "s" : "");
             JLabel vLabel = new JLabel(vText);
-            vLabel.setFont(new Font("SansSerif", Font.PLAIN, 11));
+            vLabel.setFont(UIScale.font("SansSerif", Font.PLAIN, 11));
             vLabel.setForeground(violationCount == 0 ? new Color(46, 125, 50) : new Color(192, 57, 43));
             card.add(vLabel, BorderLayout.EAST);
 
@@ -231,7 +231,7 @@ public class ArrangementPanel extends JPanel {
         if (constraintSet != null && graph != null) {
             double totalScore = constraintSet.evaluate(arr, graph);
             JLabel scoreLabel = new JLabel("Overall: " + String.format("%.1f%%", totalScore * 100));
-            scoreLabel.setFont(new Font("SansSerif", Font.BOLD, 13));
+            scoreLabel.setFont(UIScale.font("SansSerif", Font.BOLD, 13));
             scoreLabel.setForeground(scoreColor(totalScore));
             scoreLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
             detailPanel.add(scoreLabel);
@@ -246,7 +246,7 @@ public class ArrangementPanel extends JPanel {
                 String colorHex = satisfied ? "2E7D32" : "C0392B";
                 String text = icon + c.describe() + " (" + String.format("%.0f%%", cScore * 100) + ")";
                 JLabel ruleLabel = new JLabel("<html><div style='width:200px;color:#" + colorHex + "'>" + text + "</div></html>");
-                ruleLabel.setFont(new Font("SansSerif", Font.PLAIN, 11));
+                ruleLabel.setFont(UIScale.font("SansSerif", Font.PLAIN, 11));
                 ruleLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
                 detailPanel.add(ruleLabel);
                 detailPanel.add(Box.createVerticalStrut(2));
@@ -254,7 +254,7 @@ public class ArrangementPanel extends JPanel {
 
             if (all.isEmpty()) {
                 JLabel noRules = new JLabel("No constraints defined.");
-                noRules.setFont(new Font("SansSerif", Font.ITALIC, 11));
+                noRules.setFont(UIScale.font("SansSerif", Font.ITALIC, 11));
                 noRules.setForeground(new Color(140, 140, 145));
                 noRules.setAlignmentX(Component.LEFT_ALIGNMENT);
                 detailPanel.add(noRules);

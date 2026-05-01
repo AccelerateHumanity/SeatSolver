@@ -38,11 +38,11 @@ public class ConstraintPanel extends JPanel {
 
         setLayout(new BorderLayout(0, 4));
         setBackground(new Color(250, 250, 252));
-        setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
+        setBorder(UIScale.emptyBorder(8, 8, 8, 8));
 
         // Header
         JLabel header = new JLabel("Rules: 0");
-        header.setFont(new Font("SansSerif", Font.BOLD, 12));
+        header.setFont(UIScale.font("SansSerif", Font.BOLD, 12));
         add(header, BorderLayout.NORTH);
 
         // Constraint list

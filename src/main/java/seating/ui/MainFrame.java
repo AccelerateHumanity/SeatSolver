@@ -78,7 +78,7 @@ public class MainFrame extends JFrame {
         initialSnapshot = seating.layout.ResetCommand.Snapshot.capture(classroom);
 
         pack();
-        setMinimumSize(new Dimension(900, 600));
+        setMinimumSize(UIScale.dimension(900, 600));
         setLocationRelativeTo(null);
     }
 
@@ -101,7 +101,7 @@ public class MainFrame extends JFrame {
 
         // Right: Tabbed side panel (Students/Rules/Results tabs)
         sidePanel = new JTabbedPane();
-        sidePanel.setPreferredSize(new Dimension(380, 0));
+        sidePanel.setPreferredSize(UIScale.dimension(380, 0));
         sidePanel.addTab("Students", studentPanel);
         sidePanel.addTab("Rules", constraintPanel);
         sidePanel.addTab("Results", arrangementPanel);
@@ -111,14 +111,14 @@ public class MainFrame extends JFrame {
         JPanel statusBar = new JPanel(new BorderLayout(10, 0));
         statusBar.setBorder(BorderFactory.createCompoundBorder(
             BorderFactory.createMatteBorder(1, 0, 0, 0, new Color(210, 210, 215)),
-            BorderFactory.createEmptyBorder(4, 10, 4, 10)));
+            UIScale.emptyBorder(4, 10, 4, 10)));
         statusBar.setBackground(new Color(248, 248, 250));
         statusLabel = new JLabel("Desks: 0 | Seats: 0");
-        statusLabel.setFont(new Font("SansSerif", Font.PLAIN, 12));
+        statusLabel.setFont(UIScale.font("SansSerif", Font.PLAIN, 12));
         statusLabel.setForeground(new Color(100, 100, 105));
         statusBar.add(statusLabel, BorderLayout.WEST);
         JLabel creditLabel = new JLabel("Created by Harley Chu");
-        creditLabel.setFont(new Font("SansSerif", Font.ITALIC, 11));
+        creditLabel.setFont(UIScale.font("SansSerif", Font.ITALIC, 11));
         creditLabel.setForeground(new Color(140, 140, 145));
         statusBar.add(creditLabel, BorderLayout.EAST);
         add(statusBar, BorderLayout.SOUTH);
@@ -142,7 +142,7 @@ public class MainFrame extends JFrame {
         // Row: Save + Load
         JPanel fileRow = new JPanel(new java.awt.GridLayout(1, 2, 4, 0));
         fileRow.setOpaque(false);
-        fileRow.setMaximumSize(new Dimension(Short.MAX_VALUE, 32));
+        fileRow.setMaximumSize(new Dimension(Short.MAX_VALUE, UIScale.scaled(32)));
         JButton saveBtn = new JButton("Save");
         saveBtn.setToolTipText("Save project to JSON");
         saveBtn.addActionListener(new java.awt.event.ActionListener() {
@@ -160,7 +160,7 @@ public class MainFrame extends JFrame {
         // Generate Seating (full-width, prominent)
         generateBtn = new JButton("\u25B6 Generate Seating");
         generateBtn.setToolTipText("Run CSP solver to generate arrangements");
-        generateBtn.setFont(new Font("SansSerif", Font.BOLD, 12));
+        generateBtn.setFont(UIScale.font("SansSerif", Font.BOLD, 12));
         generateBtn.addActionListener(new java.awt.event.ActionListener() {
             public void actionPerformed(java.awt.event.ActionEvent e) { generateSeating(); }
         });
@@ -169,7 +169,7 @@ public class MainFrame extends JFrame {
         // Row: Undo + Redo
         JPanel undoRow = new JPanel(new java.awt.GridLayout(1, 2, 4, 0));
         undoRow.setOpaque(false);
-        undoRow.setMaximumSize(new Dimension(Short.MAX_VALUE, 32));
+        undoRow.setMaximumSize(new Dimension(Short.MAX_VALUE, UIScale.scaled(32)));
         undoBtn = new JButton("Undo");
         undoBtn.setToolTipText("Undo (Ctrl+Z)");
         undoBtn.addActionListener(new java.awt.event.ActionListener() {

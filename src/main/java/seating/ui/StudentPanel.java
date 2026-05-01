@@ -31,13 +31,13 @@ public class StudentPanel extends JPanel {
         students = new ArrayList<Student>();
         setLayout(new BorderLayout(0, 4));
         setBackground(new Color(250, 250, 252));
-        setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
+        setBorder(UIScale.emptyBorder(8, 8, 8, 8));
 
         // Table
         tableModel = new StudentTableModel();
         table = new JTable(tableModel);
         table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-        table.setRowHeight(24);
+        table.setRowHeight(UIScale.scaled(24));
         table.getColumnModel().getColumn(0).setPreferredWidth(90);  // Name
         table.getColumnModel().getColumn(1).setPreferredWidth(20);  // Gender
         table.getColumnModel().getColumn(2).setPreferredWidth(25);  // Skill
@@ -127,7 +127,7 @@ public class StudentPanel extends JPanel {
 
         // Count label
         JLabel countLabel = new JLabel("Students: 0");
-        countLabel.setFont(new Font("SansSerif", Font.BOLD, 12));
+        countLabel.setFont(UIScale.font("SansSerif", Font.BOLD, 12));
         add(countLabel, BorderLayout.NORTH);
     }
 

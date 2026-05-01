@@ -1,6 +1,7 @@
 package seating;
 
 import seating.ui.MainFrame;
+import seating.ui.UIScale;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 
@@ -26,6 +27,11 @@ public class SeatingApp {
         } catch (Exception e) {
             // Fall back to default look and feel
         }
+
+        // HiDPI: floor every default Swing font at 13pt (× DPI on legacy JVMs)
+        // so JFileChooser, JOptionPane, tooltips, menus, and any widget that
+        // doesn't go through UIScale.font(...) inherit a readable size on 4K.
+        UIScale.installUIDefaults(13);
 
         // Launch on the Event Dispatch Thread
         SwingUtilities.invokeLater(new Runnable() {
