@@ -294,8 +294,11 @@ public class CSPSolver {
                         java.awt.geom.Point2D pa = seat.getGlobalPosition();
                         java.awt.geom.Point2D pb = otherSeat.getGlobalPosition();
                         double dist = pa.distance(pb);
+                        double maxDist = graph.getMaxAchievableDistance() > 0
+                            ? graph.getMaxAchievableDistance()
+                            : seating.constraint.ProximityConstraint.MAX_PROXIMITY_DISTANCE;
                         double closeness = Math.max(0.0, Math.min(1.0,
-                            1.0 - dist / seating.constraint.ProximityConstraint.MAX_PROXIMITY_DISTANCE));
+                            1.0 - dist / maxDist));
                         if (graph.areAdjacent(seat, otherSeat)) closeness = 1.0;
                         if ("apart".equals(pc.getMode())) {
                             score += 1.0 - closeness;

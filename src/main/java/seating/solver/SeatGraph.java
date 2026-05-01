@@ -21,10 +21,16 @@ import java.util.Set;
 public class SeatGraph {
 
     private HashMap<Seat, Set<Seat>> adjacency;
+    /** Largest pairwise seat distance in this layout — the actual achievable
+     *  "as far apart as possible" optimum. Used by ProximityConstraint to
+     *  score relative to what's reachable in this classroom, not a fixed
+     *  theoretical maximum. */
+    private double maxAchievableDistance;
 
     /** Creates an empty graph. */
     public SeatGraph() {
         adjacency = new HashMap<Seat, Set<Seat>>();
+        maxAchievableDistance = 0.0;
     }
 
     /**
@@ -34,7 +40,16 @@ public class SeatGraph {
      */
     public SeatGraph(HashMap<Seat, Set<Seat>> adjacency) {
         this.adjacency = adjacency;
+        this.maxAchievableDistance = 0.0;
     }
+
+    /** Sets the precomputed max pairwise seat distance (used by buildFrom). */
+    public void setMaxAchievableDistance(double d) { this.maxAchievableDistance = d; }
+
+    /** Returns the largest pairwise seat distance, or 0 if not computed.
+     *  ProximityConstraint uses this to scale scores relative to the actual
+     *  best-achievable distance in this classroom layout. */
+    public double getMaxAchievableDistance() { return maxAchievableDistance; }
 
     /**
      * Builds the adjacency graph from a classroom's desk layout.
@@ -54,7 +69,10 @@ public class SeatGraph {
             adj.put(seat, new HashSet<Seat>());
         }
 
-        // Pairwise distance check — O(n^2), acceptable for classroom sizes
+        // Pairwise distance check — O(n^2), acceptable for classroom sizes.
+        // Track the maximum pairwise distance so ProximityConstraint can
+        // score relative to the actual achievable "far apart" extreme.
+        double maxDist = 0.0;
         for (int i = 0; i < allSeats.size(); i++) {
             for (int j = i + 1; j < allSeats.size(); j++) {
                 Seat a = allSeats.get(i);
@@ -62,6 +80,7 @@ public class SeatGraph {
                 Point2D posA = a.getGlobalPosition();
                 Point2D posB = b.getGlobalPosition();
                 double dist = posA.distance(posB);
+                if (dist > maxDist) maxDist = dist;
 
                 if (dist <= threshold) {
                     adj.get(a).add(b);
@@ -81,7 +100,9 @@ public class SeatGraph {
             }
         }
 
-        return new SeatGraph(adj);
+        SeatGraph graph = new SeatGraph(adj);
+        graph.setMaxAchievableDistance(maxDist);
+        return graph;
     }
 
     /**

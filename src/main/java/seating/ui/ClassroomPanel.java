@@ -376,6 +376,43 @@ public class ClassroomPanel extends JPanel {
     private void toggleDisco() {
         discoMode = !discoMode;
         if (discoMode) {
+            // Cancel any in-flight drag/ghost interaction. If the user was
+            // mid-drag when disco started, the drop logic would otherwise
+            // never run — leaving the desk in a half-moved (and possibly
+            // colliding) state on disco exit.
+            if (isDragging && selectedDesk != null) {
+                selectedDesk.setPosition(dragStartGx, dragStartGy);
+            }
+            if (isDraggingLandmark && selectedLandmark != null) {
+                selectedLandmark.setPosition(lmDragStartGx, lmDragStartGy);
+            }
+            if (isMultiDragging) {
+                for (Desk d : selectedDesks) {
+                    int[] pos = multiDragStartPos.get(d);
+                    if (pos != null) d.setPosition(pos[0], pos[1]);
+                }
+                for (Landmark lm : selectedLandmarks) {
+                    int[] pos = multiDragLmStartPos.get(lm);
+                    if (pos != null) lm.setPosition(pos[0], pos[1]);
+                }
+            }
+            isDragging = false;
+            isDraggingLandmark = false;
+            isMultiDragging = false;
+            isRectSelecting = false;
+            draggedStudent = null;
+            draggedStudentSourceSeat = null;
+            ghostDesk = null;
+            ghostLandmark = null;
+            pendingDuplicates = null;
+            pendingDupOffsetsGx = null;
+            pendingDupOffsetsGy = null;
+            if (rotationBatchTimer != null) rotationBatchTimer.stop();
+            rotationBatchTotal = 0;
+            rotationBatchStartDeskPos.clear();
+            rotationBatchStartLmPos.clear();
+            setCursor(Cursor.getDefaultCursor());
+
             java.util.List<Desk> desks = classroom.getDesks();
             int n = desks.size();
             if (n == 0) { discoMode = false; return; }
@@ -1049,12 +1086,29 @@ public class ClassroomPanel extends JPanel {
             JMenuItem rotateAll = new JMenuItem("Rotate Selected 90\u00B0");
             rotateAll.addActionListener(new ActionListener() {
                 public void actionPerformed(ActionEvent ae) {
+                    // Apply rotations, snap to bounds, then collision-check.
+                    // Revert any item that ends up overlapping after the snap.
                     for (Desk d : selectedDesks) {
-                        undoManager.execute(new RotateDeskCommand(d, 90));
+                        d.rotate(90);
+                        snapDeskIntoBounds(d);
+                        if (classroom.hasCollision(d, d)) {
+                            d.rotate(-90);
+                            snapDeskIntoBounds(d);
+                        } else {
+                            undoManager.pushExecuted(new RotateDeskCommand(d, 90));
+                        }
                     }
                     for (Landmark lm : selectedLandmarks) {
-                        undoManager.execute(new RotateLandmarkCommand(lm, 90));
+                        lm.rotate(90);
+                        snapLandmarkIntoBounds(lm);
+                        if (classroom.hasLandmarkCollision(lm, lm)) {
+                            lm.rotate(-90);
+                            snapLandmarkIntoBounds(lm);
+                        } else {
+                            undoManager.pushExecuted(new RotateLandmarkCommand(lm, 90));
+                        }
                     }
+                    refreshLiveScore();
                     repaint();
                 }
             });
@@ -1166,16 +1220,14 @@ public class ClassroomPanel extends JPanel {
         JMenuItem rotateCW = new JMenuItem("Rotate 90\u00B0 CW");
         rotateCW.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent ae) {
-                undoManager.execute(new RotateDeskCommand(selectedDesk, 90));
-                repaint();
+                tryRotateDesk(selectedDesk, 90);
             }
         });
 
         JMenuItem rotateCCW = new JMenuItem("Rotate 90\u00B0 CCW");
         rotateCCW.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent ae) {
-                undoManager.execute(new RotateDeskCommand(selectedDesk, -90));
-                repaint();
+                tryRotateDesk(selectedDesk, -90);
             }
         });
 
@@ -1246,7 +1298,18 @@ public class ClassroomPanel extends JPanel {
         JMenuItem rotateItem = new JMenuItem("Rotate 90\u00B0");
         rotateItem.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent ae) {
-                undoManager.execute(new RotateLandmarkCommand(landmark, 90));
+                landmark.rotate(90);
+                snapLandmarkIntoBounds(landmark);
+                if (classroom.hasLandmarkCollision(landmark, landmark)) {
+                    landmark.rotate(-90);
+                    snapLandmarkIntoBounds(landmark);
+                    JOptionPane.showMessageDialog(ClassroomPanel.this,
+                        "Cannot rotate — would overlap another item.",
+                        "Rotate", JOptionPane.INFORMATION_MESSAGE);
+                } else {
+                    undoManager.pushExecuted(new RotateLandmarkCommand(landmark, 90));
+                    refreshLiveScore();
+                }
                 repaint();
             }
         });
@@ -1761,6 +1824,23 @@ public class ClassroomPanel extends JPanel {
         repaint();
     }
 
+    /** Rotates a desk by deltaDegrees if the result fits without collision; otherwise reverts. */
+    private void tryRotateDesk(Desk d, double deltaDegrees) {
+        d.rotate(deltaDegrees);
+        snapDeskIntoBounds(d);
+        if (classroom.hasCollision(d, d)) {
+            d.rotate(-deltaDegrees);
+            snapDeskIntoBounds(d);
+            JOptionPane.showMessageDialog(ClassroomPanel.this,
+                "Cannot rotate — would overlap another item.",
+                "Rotate", JOptionPane.INFORMATION_MESSAGE);
+        } else {
+            undoManager.pushExecuted(new RotateDeskCommand(d, deltaDegrees));
+            refreshLiveScore();
+        }
+        repaint();
+    }
+
     private void snapDeskIntoBounds(Desk d) {
         int[] p = gridManager.clampToClassroom(d, d.getGridX(), d.getGridY());
         if (p[0] != d.getGridX() || p[1] != d.getGridY()) {
@@ -1927,9 +2007,16 @@ public class ClassroomPanel extends JPanel {
         }
         drawStudentNames(g, gs);
 
-        // Draw heat map overlay (green-yellow-red per seat)
+        // Draw heat map overlay (green-yellow-red per seat).
+        // In disco mode, pass desk pixel positions so heat dots ride along
+        // with the bouncing desks instead of staying at the original grid spots.
         if (heatMapEnabled && currentArrangement != null && constraintSet != null && seatGraph != null) {
-            HeatMapOverlay.draw(g, currentArrangement, constraintSet, seatGraph, classroom);
+            if (discoMode && discoPx != null) {
+                HeatMapOverlay.draw(g, currentArrangement, constraintSet, seatGraph,
+                    classroom, discoPx, discoPy, discoRotAngle, gs);
+            } else {
+                HeatMapOverlay.draw(g, currentArrangement, constraintSet, seatGraph, classroom);
+            }
         }
 
         // Draw conflict overlay (red lines between violating students)

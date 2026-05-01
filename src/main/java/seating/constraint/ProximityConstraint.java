@@ -72,7 +72,16 @@ public class ProximityConstraint implements Constraint {
         java.awt.geom.Point2D posA = seatA.getGlobalPosition();
         java.awt.geom.Point2D posB = seatB.getGlobalPosition();
         double dist = posA.distance(posB);
-        double closeness = Math.max(0.0, Math.min(1.0, 1.0 - dist / MAX_PROXIMITY_DISTANCE));
+        // Relative scoring: scale by the actual maximum achievable distance
+        // in this classroom (longest pairwise seat distance). Falls back to
+        // MAX_PROXIMITY_DISTANCE if the graph hasn't been built yet. This
+        // way "as far apart as possible in THIS room" scores 1.0, instead
+        // of comparing against a fixed theoretical optimum that may be
+        // unreachable in a small classroom.
+        double maxDist = (graph != null && graph.getMaxAchievableDistance() > 0)
+            ? graph.getMaxAchievableDistance()
+            : MAX_PROXIMITY_DISTANCE;
+        double closeness = Math.max(0.0, Math.min(1.0, 1.0 - dist / maxDist));
         if (graph.areAdjacent(seatA, seatB)) closeness = 1.0;
 
         if (APART.equals(mode)) {

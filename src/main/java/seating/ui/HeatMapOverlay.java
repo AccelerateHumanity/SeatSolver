@@ -29,20 +29,63 @@ public class HeatMapOverlay {
     public static void draw(Graphics2D g, SeatingArrangement arrangement,
                              ConstraintSet constraints, SeatGraph graph,
                              Classroom classroom) {
+        draw(g, arrangement, constraints, graph, classroom, null, null, null, 0);
+    }
+
+    /**
+     * Draws heat map circles, applying disco-mode desk transforms when present.
+     * When {@code discoPx}/{@code discoPy}/{@code discoRotAngle} are non-null,
+     * each seat's draw position is transformed to follow its desk's bouncing
+     * disco position and rotation, so the heat map follows the dancing desks.
+     *
+     * @param discoPx pixel x of each desk index in classroom.getDesks() (or null)
+     * @param discoPy pixel y of each desk index (or null)
+     * @param discoRotAngle disco rotation angle (degrees) per desk (or null)
+     * @param gridSize current grid size (used to reconstruct seat local positions)
+     */
+    public static void draw(Graphics2D g, SeatingArrangement arrangement,
+                             ConstraintSet constraints, SeatGraph graph,
+                             Classroom classroom,
+                             double[] discoPx, double[] discoPy,
+                             double[] discoRotAngle, int gridSize) {
         if (arrangement == null || constraints == null || graph == null) return;
 
         Stroke savedStroke = g.getStroke();
         Composite savedComp = g.getComposite();
         g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.35f));
 
+        boolean disco = discoPx != null && discoPy != null && discoRotAngle != null;
+        java.util.List<Desk> allDesks = classroom.getDesks();
+
         for (Seat seat : classroom.getAllSeats()) {
             Student student = arrangement.getStudentAt(seat);
             if (student == null) continue;
+            Desk parent = seat.getParentDesk();
+            if (parent == null) continue;
 
             double score = computeSeatScore(student, seat, arrangement, constraints, graph);
             Color heatColor = scoreToColor(score);
 
-            Point2D pos = seat.getGlobalPosition();
+            Point2D pos;
+            if (disco) {
+                int idx = allDesks.indexOf(parent);
+                if (idx < 0 || idx >= discoPx.length) {
+                    pos = seat.getGlobalPosition();
+                } else {
+                    double localX = seat.getLocalX();
+                    double localY = seat.getLocalY();
+                    double dw = parent.getWidthInCells() * gridSize;
+                    double dh = parent.getHeightInCells() * gridSize;
+                    double cx = dw / 2.0, cy = dh / 2.0;
+                    double angle = Math.toRadians(discoRotAngle[idx]);
+                    double rx = cx + (localX - cx) * Math.cos(angle) - (localY - cy) * Math.sin(angle);
+                    double ry = cy + (localX - cx) * Math.sin(angle) + (localY - cy) * Math.cos(angle);
+                    pos = new Point2D.Double(discoPx[idx] + rx, discoPy[idx] + ry);
+                }
+            } else {
+                pos = seat.getGlobalPosition();
+            }
+
             int radius = 15;
             g.setColor(heatColor);
             g.fill(new Ellipse2D.Double(
